@@ -5,9 +5,10 @@
 #property description "MtApi (MT5) connection expert"
 
 #include <json.mqh>
-#include <CHistoryPositionInfo.mqh>
 #include <Trade\SymbolInfo.mqh>
 #include <trade/trade.mqh>
+#include <CHistoryPositionInfo.mqh>
+
 #include <generic/hashmap.mqh>
 
 #import "MT5Connector.dll"
@@ -115,25 +116,6 @@ void OnTick()
       OnTimer();
    }
 }
-
-// Helper: chuyển datetime -> chuỗi "yyyy.mm.dd HH:MM:SS"
-string ToIsoTime(datetime dt)
-{
-   return TimeToString(dt, TIME_DATE|TIME_MINUTES|TIME_SECONDS);
-}
-
-void OnStart()
-  {
-   string json = ExportClosedPositionsToJson(0, TimeCurrent());
-   Print(json);
-  }
-
- string _fmt_time(datetime t)
-{
-   if(t==0) return "";
-   return TimeToString(t, TIME_DATE|TIME_SECONDS);
-}  
-
 
 void  OnTradeTransaction( 
    const MqlTradeTransaction&    trans,        // trade transaction structure 
@@ -401,8 +383,6 @@ int preinit()
    ADD_EXECUTOR(304, Buy);
    ADD_EXECUTOR(305, Sell);
    ADD_EXECUTOR(401, HistoryPosition);
-   
-
    return (0);
 }
 
@@ -423,7 +403,7 @@ bool IsTesting()
 int init() 
 {
    preinit();  
-   Print("dasdsad");
+
    if (TerminalInfoInteger(TERMINAL_DLLS_ALLOWED) == false) 
    {
       MessageBox("Dlls not allowed.", "MtApi", 0);
@@ -617,6 +597,7 @@ JSONObject* GetJsonPayload()
 #define GET_STRING_JSON_VALUE(json, name_value, return_value) CHECK_JSON_VALUE(json, name_value); string return_value = json.p.getString(name_value)
 #define GET_BOOL_JSON_VALUE(json, name_value, return_value) CHECK_JSON_VALUE(json, name_value); bool return_value = json.p.getBool(name_value)
 
+
 struct HistPosData {
    string  TicketStr;
    string  Symbol;
@@ -635,8 +616,6 @@ struct HistPosData {
    double  Volume, PriceOpen, SL, TP, PriceClose, Commission, Swap, Profit;
 };
 
-//+------------------------------------------------------------------
-// Xuất toàn bộ closed positions trong khoảng [from_time, to_time] thành JSON
 string ExportClosedPositionsToJson(datetime from_time, datetime to_time)
 {
    CHistoryPositionInfo hist;
@@ -685,15 +664,26 @@ string ExportClosedPositionsToJson(datetime from_time, datetime to_time)
    return CreateSuccessResponse(arr);
 }
 
-
 //--------- Executors ----------------------------------------------------
+
+
+string Execute_HistoryPosition()
+{
+   GET_JSON_PAYLOAD(jo);
+   GET_INT_JSON_VALUE(jo, "FromDate", from_date);
+   GET_INT_JSON_VALUE(jo, "ToDate", to_date);  
+
+   string result = ExportClosedPositionsToJson((datetime)from_date, (datetime)to_date);
+   return result;
+}
+
+
 string Execute_GetQuote()
 {
    MqlTick tick;
    SymbolInfoTick(Symbol(), tick);
    
    MtQuote quote(Symbol(), tick);
-   
    return CreateSuccessResponse(quote.CreateJson());
 }
 
@@ -876,16 +866,6 @@ string Execute_HistorySelect()
 
    bool result = HistorySelect((datetime)from_date, (datetime)to_date);
    return CreateSuccessResponse(new JSONBool(result));
-}
-
-string Execute_HistoryPosition()
-{
-   GET_JSON_PAYLOAD(jo);
-   GET_INT_JSON_VALUE(jo, "FromDate", from_date);
-   GET_INT_JSON_VALUE(jo, "ToDate", to_date);  
-
-   string result = ExportClosedPositionsToJson((datetime)from_date, (datetime)to_date);
-   return result;
 }
 
 string Execute_HistorySelectByPosition()
@@ -3692,6 +3672,26 @@ private:
    MqlTradeResult _result;
 };
 
+class MtOnBookEvent : public MtObject
+{
+public:
+   MtOnBookEvent(const string& symbol)
+   {
+      _symbol = symbol;
+   }
+   
+   virtual JSONObject* CreateJson() const
+   {
+      JSONObject *jo = new JSONObject();
+      jo.put("Symbol", new JSONString(_symbol));
+      return jo;
+   }
+   
+private:
+   string _symbol;
+};
+
+
 
 class MtHistoryPosition : public MtObject
 {
@@ -3733,26 +3733,6 @@ private:
    HistPosData _d;
 };
 
-
-
-class MtOnBookEvent : public MtObject
-{
-public:
-   MtOnBookEvent(const string& symbol)
-   {
-      _symbol = symbol;
-   }
-   
-   virtual JSONObject* CreateJson() const
-   {
-      JSONObject *jo = new JSONObject();
-      jo.put("Symbol", new JSONString(_symbol));
-      return jo;
-   }
-   
-private:
-   string _symbol;
-};
 
 class MtQuote : public MtObject
 {
@@ -4014,4 +3994,3 @@ JSONObject* MqlRatesToJson(const MqlRates& rates)
    jo.put("real_volume", new JSONNumber(rates.real_volume));
    return jo;
 }
-
