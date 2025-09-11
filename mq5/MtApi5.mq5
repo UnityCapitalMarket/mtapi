@@ -4014,3 +4014,4 @@ JSONObject* MqlRatesToJson(const MqlRates& rates)
    jo.put("real_volume", new JSONNumber(rates.real_volume));
    return jo;
 }
+
