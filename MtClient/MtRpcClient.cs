@@ -118,10 +118,10 @@ namespace MtClient
 
         private async void DoWrite()
         {
-            while(ws_.State == WebSocketState.Open)
+            while (ws_.State == WebSocketState.Open)
             {
                 MtMessage? message = null;
-                lock(pendingMessages_)
+                lock (pendingMessages_)
                 {
                     if (pendingMessages_.Count > 0)
                         message = pendingMessages_.Dequeue();
@@ -138,7 +138,10 @@ namespace MtClient
                     string msgStr = message.Serialize();
                     logger_.Debug($"MtRpcClient.DoWrite: sending message: {msgStr}");
                     byte[] bytes = Encoding.ASCII.GetBytes(msgStr);
-                    await ws_.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None);
+                    var segment = new ArraySegment<byte>(bytes);
+
+                    //await ws_.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None);
+                    await ws_.SendAsync(segment, WebSocketMessageType.Text, endOfMessage: true, cancellationToken: CancellationToken.None);
                 }
                 catch (Exception e)
                 {
@@ -203,7 +206,8 @@ namespace MtClient
                 return;
             }
 
-            var pieces = msg.Split(";", 2);
+            char[] separator = { ';' };
+            var pieces = msg.Split(separator, 2);
 
             if (pieces.Length != 2
                 || string.IsNullOrEmpty(pieces[0])
@@ -345,7 +349,7 @@ namespace MtClient
 
     public class MtExpertEventArgs(int expert) : EventArgs
     {
-        public int Expert { get;  }= expert;
+        public int Expert { get; } = expert;
     }
 
     internal class StubLogger : IRpcLogger

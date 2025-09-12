@@ -186,7 +186,7 @@ namespace MtApi5.MtProtocol
         ChartSaveTemplate = 237,
         ChartWindowFind = 238,
         ChartTimePriceToXY = 239,
-        ChartXYToTimePrice  = 240,
+        ChartXYToTimePrice = 240,
         ChartOpen = 241,
         ChartFirst = 242,
         ChartNext = 243,
@@ -259,6 +259,10 @@ namespace MtApi5.MtProtocol
         OrderSendAsync = 302,
         OrderCheck = 303,
         Buy = 304,
-        Sell = 305
+        Sell = 305,
+
+        HistoryPosition = 401,
+        GetPositions = 402,
+
     }
 }

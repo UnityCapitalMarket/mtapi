@@ -8,10 +8,10 @@ namespace MtApi5
     public class MtApi5Client
     {
         #region MT Constants
-        public const int SYMBOL_EXPIRATION_GTC              = 1;
-        public const int SYMBOL_EXPIRATION_DAY              = 2;
-        public const int SYMBOL_EXPIRATION_SPECIFIED        = 4;
-        public const int SYMBOL_EXPIRATION_SPECIFIED_DAY    = 8;
+        public const int SYMBOL_EXPIRATION_GTC = 1;
+        public const int SYMBOL_EXPIRATION_DAY = 2;
+        public const int SYMBOL_EXPIRATION_SPECIFIED = 4;
+        public const int SYMBOL_EXPIRATION_SPECIFIED_DAY = 8;
 
         public const int SYMBOL_FILLING_ALL_OR_NONE = 1;
         public const int SYMBOL_CANCEL_REMAIND = 1;
@@ -28,7 +28,7 @@ namespace MtApi5
         private Mt5ConnectionState _connectionState = Mt5ConnectionState.Disconnected;
         private int _executorHandle;
         private readonly Dictionary<Mt5EventTypes, Action<int, string>> _mtEventHandlers = [];
-        
+
         private HashSet<int> _experts = [];
         private Dictionary<int, Mt5Quote> _quotes = [];
         #endregion
@@ -480,6 +480,18 @@ namespace MtApi5
             Dictionary<string, object> cmdParams = new() { { "FromDate", Mt5TimeConverter.ConvertToMtTime(fromDate) },
                 { "ToDate", Mt5TimeConverter.ConvertToMtTime(toDate) } };
             return SendCommand<bool>(ExecutorHandle, Mt5CommandType.HistorySelect, cmdParams);
+        }
+
+        public List<MT5Position> HistoryPosition(DateTime fromDate, DateTime toDate)
+        {
+            Dictionary<string, object> cmdParams = new() { { "FromDate", Mt5TimeConverter.ConvertToMtTime(fromDate) },
+                { "ToDate", Mt5TimeConverter.ConvertToMtTime(toDate) } };
+            return SendCommand<List<MT5Position>>(ExecutorHandle, Mt5CommandType.HistoryPosition, cmdParams);
+        }
+
+        public List<MT5Position> GetPositions()
+        {
+            return SendCommand<List<MT5Position>>(ExecutorHandle, Mt5CommandType.GetPositions);
         }
 
         ///<summary>
@@ -973,7 +985,7 @@ namespace MtApi5
             ratesArray = response?.ToArray() ?? [];
             return response?.Count ?? 0;
         }
-            
+
         ///<summary>
         ///Gets history data of MqlRates structure of a specified symbol-period in specified quantity into the ratesArray array. The elements ordering of the copied data is from present to the past, i.e., starting position of 0 means the current bar.
         ///</summary>
@@ -1179,7 +1191,7 @@ namespace MtApi5
         public int CopyHigh(string symbolName, ENUM_TIMEFRAMES timeframe, DateTime startTime, DateTime stopTime, out double[] highArray)
         {
             Dictionary<string, object> cmdParams = new() { { "Symbol", symbolName ?? string.Empty }, { "Timeframe", (int)timeframe },
-                 { "StartTime", Mt5TimeConverter.ConvertToMtTime(startTime) }, 
+                 { "StartTime", Mt5TimeConverter.ConvertToMtTime(startTime) },
                  { "StopTime", Mt5TimeConverter.ConvertToMtTime(stopTime) } };
             var response = SendCommand<List<double>>(ExecutorHandle, Mt5CommandType.CopyHigh2, cmdParams);
             highArray = response != null ? response.ToArray() : [];
@@ -1618,7 +1630,7 @@ namespace MtApi5
             Dictionary<string, object> cmdParams = new() { { "Symbol", name ?? string.Empty }, { "DayOfWeek", dayOfWeek },
                 { "SessionIndex", sessionIndex } };
 
-            var response = SendCommand<FuncResult<Dictionary<string,int>>>(ExecutorHandle,
+            var response = SendCommand<FuncResult<Dictionary<string, int>>>(ExecutorHandle,
                 Mt5CommandType.SymbolInfoSessionQuote, cmdParams);
             if (response != null && response.Result != null
                 && response.Result.TryGetValue("From", out int mtFrom)
@@ -1646,7 +1658,7 @@ namespace MtApi5
             Dictionary<string, object> cmdParams = new() { { "Symbol", name ?? string.Empty }, { "DayOfWeek", dayOfWeek },
                 { "SessionIndex", sessionIndex } };
 
-            var response = SendCommand<FuncResult<Dictionary<string,int>>>(ExecutorHandle,
+            var response = SendCommand<FuncResult<Dictionary<string, int>>>(ExecutorHandle,
                 Mt5CommandType.SymbolInfoSessionTrade, cmdParams);
             if (response != null && response.Result != null
                 && response.Result.TryGetValue("From", out int mtFrom)
@@ -1793,7 +1805,7 @@ namespace MtApi5
             Dictionary<string, object> cmdParams = new() { { "ChartId", chartId }, { "SubWindow", subWindow },
                 { "Time", Mt5TimeConverter.ConvertToMtTime(time) }, { "Price", price } };
 
-            var response = SendCommand<FuncResult<Dictionary<string,int>>>(ExecutorHandle, Mt5CommandType.ChartTimePriceToXY, cmdParams);
+            var response = SendCommand<FuncResult<Dictionary<string, int>>>(ExecutorHandle, Mt5CommandType.ChartTimePriceToXY, cmdParams);
             if (response != null && response.Result != null
                 && response.Result.TryGetValue("X", out x)
                 && response.Result.TryGetValue("Y", out y))
@@ -1817,7 +1829,7 @@ namespace MtApi5
         public bool ChartXYToTimePrice(long chartId, int x, int y, out int subWindow, out DateTime? time, out double price)
         {
             Dictionary<string, object> cmdParams = new() { { "ChartId", chartId }, { "X", x }, { "Y", y } };
-            var response = SendCommand<FuncResult<Dictionary<string,object>>>(ExecutorHandle, Mt5CommandType.ChartXYToTimePrice, cmdParams);
+            var response = SendCommand<FuncResult<Dictionary<string, object>>>(ExecutorHandle, Mt5CommandType.ChartXYToTimePrice, cmdParams);
             if (response != null && response.Result != null
                 && response.Result.TryGetValue("SubWindow", out object? mtSubWindow)
                 && response.Result.TryGetValue("Time", out object? mtTime)
@@ -2264,7 +2276,7 @@ namespace MtApi5
         {
             //Count the additional coordinates
             int iAdditionalCoordinates = (listOfCoordinates != null) ? listOfCoordinates.Count : 0;
-            if(iAdditionalCoordinates > 29)
+            if (iAdditionalCoordinates > 29)
                 throw new ArgumentOutOfRangeException(nameof(listOfCoordinates), "The maximum amount of coordinates in 30.");
 
             Dictionary<string, object> cmdParams = new() { { "ChartId", chartId }, { "Name", name ?? string.Empty },
@@ -2542,7 +2554,7 @@ namespace MtApi5
         ///<param name="lipsShift">The shift of the green line relative to the price chart.</param>
         ///<param name="maMethod">The method of averaging. Can be any of the ENUM_MA_METHOD values.</param>
         ///<param name="appliedPrice">The price used. Can be any of the price constants ENUM_APPLIED_PRICE or a handle of another indicator.</param>
-        public int iAlligator(string symbol, ENUM_TIMEFRAMES period, int jawPeriod, int jawShift, int teethPeriod, 
+        public int iAlligator(string symbol, ENUM_TIMEFRAMES period, int jawPeriod, int jawShift, int teethPeriod,
             int teethShift, int lipsPeriod, int lipsShift, ENUM_MA_METHOD maMethod, ENUM_APPLIED_PRICE appliedPrice)
         {
             Dictionary<string, object> cmdParams = new() { { "Symbol", symbol ?? string.Empty }, { "Period", (int)period },
@@ -2768,7 +2780,7 @@ namespace MtApi5
         ///<param name="lipsShift">The shift of the green line relative to the price charts. It isn't directly connected with the visual shift of the indicator histogram.</param>
         ///<param name="maMethod">Smoothing type. Can be one of the values of ENUM_MA_METHOD.</param>
         ///<param name="appliedPrice">The price used. Can be any of the price constants ENUM_APPLIED_PRICE or a handle of another indicator.</param>
-        public int iGator(string symbol, ENUM_TIMEFRAMES period, int jawPeriod, int jawShift, int teethPeriod, 
+        public int iGator(string symbol, ENUM_TIMEFRAMES period, int jawPeriod, int jawShift, int teethPeriod,
             int teethShift, int lipsPeriod, int lipsShift, ENUM_MA_METHOD maMethod, ENUM_APPLIED_PRICE appliedPrice)
         {
             Dictionary<string, object> cmdParams = new() { { "Symbol", symbol ?? string.Empty }, { "Period", (int)period },
@@ -3055,7 +3067,7 @@ namespace MtApi5
         public int iCustom(string symbol, ENUM_TIMEFRAMES period, string name, double[] parameters)
         {
             Dictionary<string, object> cmdParams = new() { { "Symbol", symbol ?? string.Empty },
-                { "Timeframe", (int)period }, { "Name", name ?? string.Empty}, 
+                { "Timeframe", (int)period }, { "Name", name ?? string.Empty},
                 { "Params", parameters }, { "ParamsType", ParametersType.Double} };
             return SendCommand<int>(ExecutorHandle, Mt5CommandType.iCustom, cmdParams);
         }
@@ -3175,7 +3187,7 @@ namespace MtApi5
         ///<param name="name">Global variable name.</param>
         public bool GlobalVariableCheck(string name)
         {
-            Dictionary<string, string> cmdParams = new() { { "Name", name ?? string.Empty } }; 
+            Dictionary<string, string> cmdParams = new() { { "Name", name ?? string.Empty } };
             return SendCommand<bool>(ExecutorHandle, Mt5CommandType.GlobalVariableCheck, cmdParams);
         }
 
@@ -3401,7 +3413,7 @@ namespace MtApi5
                 }
                 else
                     Log.Warn($"ProcessExpertAdded: failed to get quote for expert {handle}");
-                    
+
             }
             else
                 Log.Warn($"ProcessExpertAdded: expert handle {handle} is already exist");
