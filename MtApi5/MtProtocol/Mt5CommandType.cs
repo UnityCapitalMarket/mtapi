@@ -263,6 +263,6 @@ namespace MtApi5.MtProtocol
 
         HistoryPosition = 401,
         GetPositions = 402,
-
+        SymbolsInfo = 403,
     }
 }

@@ -482,16 +482,21 @@ namespace MtApi5
             return SendCommand<bool>(ExecutorHandle, Mt5CommandType.HistorySelect, cmdParams);
         }
 
-        public List<MT5Position> HistoryPosition(DateTime fromDate, DateTime toDate)
+        public List<MT5Position>? HistoryPosition(DateTime fromDate, DateTime toDate)
         {
             Dictionary<string, object> cmdParams = new() { { "FromDate", Mt5TimeConverter.ConvertToMtTime(fromDate) },
                 { "ToDate", Mt5TimeConverter.ConvertToMtTime(toDate) } };
             return SendCommand<List<MT5Position>>(ExecutorHandle, Mt5CommandType.HistoryPosition, cmdParams);
         }
 
-        public List<MT5Position> GetPositions()
+        public List<MT5Position>? GetPositions()
         {
             return SendCommand<List<MT5Position>>(ExecutorHandle, Mt5CommandType.GetPositions);
+        }
+
+        public List<MT5SymbolInfo> GetSymbolsInfo()
+        {
+            return SendCommand<List<MT5SymbolInfo>>(ExecutorHandle, Mt5CommandType.SymbolsInfo);
         }
 
         ///<summary>
