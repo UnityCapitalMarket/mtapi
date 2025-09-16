@@ -384,6 +384,7 @@ int preinit()
    ADD_EXECUTOR(305, Sell);
    ADD_EXECUTOR(401, HistoryPosition);
    ADD_EXECUTOR(402, GetPositions);
+   ADD_EXECUTOR(403, SymbolsInfo);
    return (0);
 }
 
@@ -648,6 +649,100 @@ struct PosData
    double   Profit;
 };
 
+
+struct SymbolInFo
+{
+   // --- Identity & description
+   string  name;
+   string  currency_base;
+   string  currency_profit;
+   string  currency_margin;
+   string  bank;
+   string  description;
+   string  path;
+
+   // --- Tick (last refreshed via RefreshRates)
+   datetime tick_time;
+   double   bid;
+   double   ask;
+   double   last;
+   ulong    volume;        // m_tick.volume
+
+   // --- Price precision & unit
+   int      digits;
+   double   point;
+   double   tick_value;
+   double   tick_value_profit;
+   double   tick_value_loss;
+   double   tick_size;
+
+   // --- Lots & contract
+   double   contract_size;
+   double   lots_min;
+   double   lots_max;
+   double   lots_step;
+   double   lots_limit;
+
+   // --- Swaps
+   double   swap_long;
+   double   swap_short;
+   ENUM_SYMBOL_SWAP_MODE swap_mode;
+   ENUM_DAY_OF_WEEK      swap3;
+
+   // --- Trading config
+   int                         order_mode;       // SYMBOL_ORDER_MODE flags
+   ENUM_SYMBOL_TRADE_EXECUTION trade_execution;
+   ENUM_SYMBOL_CALC_MODE       trade_calcmode;
+   ENUM_SYMBOL_TRADE_MODE      trade_mode;
+
+   // --- Trading time / filling flags
+   int trade_time_flags;  // SYMBOL_EXPIRATION_MODE in CSymbolInfo::Refresh vào đây
+   int trade_fill_flags;  // SYMBOL_FILLING_MODE
+
+   // --- Spread & book depth
+   int   spread;
+   bool  spread_float;
+   int   ticks_book_depth;
+
+   // --- Trade levels
+   int   stops_level;
+   int   freeze_level;
+
+   // --- High/Low snapshots
+   double bid_high;
+   double bid_low;
+   double ask_high;
+   double ask_low;
+   double last_high;
+   double last_low;
+
+   // --- Futures timing
+   datetime start_time;
+   datetime expiration_time;
+
+   // --- Margin parameters
+   double margin_initial;
+   double margin_maintenance;
+   bool   margin_hedged_use_leg;
+   double margin_hedged;
+
+   // --- Session info
+   long   session_deals;
+   long   session_buy_orders;
+   long   session_sell_orders;
+   double session_turnover;
+   double session_interest;
+   double session_buy_orders_volume;
+   double session_sell_orders_volume;
+   double session_open;
+   double session_close;
+   double session_aw;
+   double session_price_settlement;
+   double session_price_limit_min;
+   double session_price_limit_max;
+};
+
+
 string ExportClosedPositionsToJson(datetime from_time, datetime to_time)
 {
    CHistoryPositionInfo hist;
@@ -696,6 +791,125 @@ string ExportClosedPositionsToJson(datetime from_time, datetime to_time)
    return CreateSuccessResponse(arr);
 }
 
+
+string ExportSymbolsToJson()
+{
+
+   int count = (int)SymbolsTotal(false);
+   JSONArray *arr = new JSONArray();
+   int k = 0; // chỉ số "liền mạch" trong mảng JSON
+   for (int i = 0; i < count; ++i)
+   {
+      string sym = SymbolName(i, false);
+      
+      if(!SymbolSelect(sym,true))
+      {
+         continue;
+      }
+      CSymbolInfo s ;
+  
+      if(!s.Name(sym))
+      {
+        continue;
+      }
+      s.Refresh();
+      s.RefreshRates();
+      SymbolInFo data ;
+      data.name = sym; 
+      SymbolInfoString(sym, SYMBOL_CURRENCY_BASE,   data.currency_base);
+      SymbolInfoString(sym, SYMBOL_CURRENCY_PROFIT, data.currency_profit);
+      SymbolInfoString(sym, SYMBOL_CURRENCY_MARGIN, data.currency_margin);
+      SymbolInfoString(sym, SYMBOL_BANK,            data.bank);
+      data.description = s.Description();
+      SymbolInfoString(sym, SYMBOL_PATH,            data.path);
+
+      long  t=0; SymbolInfoInteger(sym, SYMBOL_TIME, t);
+      data.tick_time = (datetime)t;
+      data.bid   = s.Bid();
+      data.ask   = s.Ask();
+      data.last  = s.Last();
+      data.volume= (ulong)s.Volume();
+      
+      long  digits=0; SymbolInfoInteger(sym, SYMBOL_DIGITS, digits);
+      data.digits = (int)digits;
+      double v=0.0;
+      SymbolInfoDouble(sym, SYMBOL_POINT, v);                    data.point = v;
+      SymbolInfoDouble(sym, SYMBOL_TRADE_TICK_VALUE, v);         data.tick_value = v;
+      SymbolInfoDouble(sym, SYMBOL_TRADE_TICK_VALUE_PROFIT, v);  data.tick_value_profit = v;
+      SymbolInfoDouble(sym, SYMBOL_TRADE_TICK_VALUE_LOSS, v);    data.tick_value_loss = v;
+      SymbolInfoDouble(sym, SYMBOL_TRADE_TICK_SIZE, v);          data.tick_size = v;      
+      
+      
+      SymbolInfoDouble(sym, SYMBOL_TRADE_CONTRACT_SIZE, v); data.contract_size = v;
+      SymbolInfoDouble(sym, SYMBOL_VOLUME_MIN, v);          data.lots_min = v;
+      SymbolInfoDouble(sym, SYMBOL_VOLUME_MAX, v);          data.lots_max = v;
+      SymbolInfoDouble(sym, SYMBOL_VOLUME_STEP, v);         data.lots_step = v;
+      SymbolInfoDouble(sym, SYMBOL_VOLUME_LIMIT, v);        data.lots_limit = v;
+      SymbolInfoDouble(sym, SYMBOL_SWAP_LONG, v);  data.swap_long  = v;
+      SymbolInfoDouble(sym, SYMBOL_SWAP_SHORT, v); data.swap_short = v;
+      long li=0;
+      SymbolInfoInteger(sym, SYMBOL_SWAP_MODE, li);            data.swap_mode = (ENUM_SYMBOL_SWAP_MODE)li;
+      SymbolInfoInteger(sym, SYMBOL_SWAP_ROLLOVER3DAYS, li);   data.swap3     = (ENUM_DAY_OF_WEEK)li;
+
+      // --- Trading config
+      SymbolInfoInteger(sym, SYMBOL_ORDER_MODE, li);       data.order_mode      = (int)li;
+    
+      SymbolInfoInteger(sym, SYMBOL_TRADE_CALC_MODE, li);  data.trade_calcmode  = (ENUM_SYMBOL_CALC_MODE)li;
+      SymbolInfoInteger(sym, SYMBOL_TRADE_MODE, li);       data.trade_mode      = (ENUM_SYMBOL_TRADE_MODE)li;
+
+      // --- Trading time / filling flags
+      SymbolInfoInteger(sym, SYMBOL_EXPIRATION_MODE, li);  data.trade_time_flags = (int)li;
+      SymbolInfoInteger(sym, SYMBOL_FILLING_MODE, li);     data.trade_fill_flags = (int)li;
+
+      // --- Spread & book depth
+      SymbolInfoInteger(sym, SYMBOL_SPREAD, li);           data.spread = (int)li;
+      SymbolInfoInteger(sym, SYMBOL_SPREAD_FLOAT, li);     data.spread_float = (bool)li;
+      SymbolInfoInteger(sym, SYMBOL_TICKS_BOOKDEPTH, li);  data.ticks_book_depth = (int)li;
+
+      // --- Trade levels
+      SymbolInfoInteger(sym, SYMBOL_TRADE_STOPS_LEVEL, li);   data.stops_level  = (int)li;
+      SymbolInfoInteger(sym, SYMBOL_TRADE_FREEZE_LEVEL, li);  data.freeze_level = (int)li;
+
+      // --- High/Low snapshots
+      SymbolInfoDouble(sym, SYMBOL_BIDHIGH, v); data.bid_high = v;
+      SymbolInfoDouble(sym, SYMBOL_BIDLOW,  v); data.bid_low  = v;
+      SymbolInfoDouble(sym, SYMBOL_ASKHIGH, v); data.ask_high = v;
+      SymbolInfoDouble(sym, SYMBOL_ASKLOW,  v); data.ask_low  = v;
+      SymbolInfoDouble(sym, SYMBOL_LASTHIGH,v); data.last_high= v;
+      SymbolInfoDouble(sym, SYMBOL_LASTLOW, v); data.last_low = v;
+
+      // --- Futures timing
+      SymbolInfoInteger(sym, SYMBOL_START_TIME, li);      data.start_time      = (datetime)li;
+      SymbolInfoInteger(sym, SYMBOL_EXPIRATION_TIME, li); data.expiration_time = (datetime)li;
+
+      // --- Margin parameters
+      SymbolInfoDouble(sym, SYMBOL_MARGIN_INITIAL, v);       data.margin_initial = v;
+      SymbolInfoDouble(sym, SYMBOL_MARGIN_MAINTENANCE, v);   data.margin_maintenance = v;
+      SymbolInfoInteger(sym, SYMBOL_MARGIN_HEDGED_USE_LEG, li); data.margin_hedged_use_leg = (bool)li;
+      SymbolInfoDouble(sym, SYMBOL_MARGIN_HEDGED, v);        data.margin_hedged = v;
+
+      // --- Session info
+      SymbolInfoInteger(sym, SYMBOL_SESSION_DEALS, li);             data.session_deals = (long)li;
+      SymbolInfoInteger(sym, SYMBOL_SESSION_BUY_ORDERS, li);        data.session_buy_orders = (long)li;
+      SymbolInfoInteger(sym, SYMBOL_SESSION_SELL_ORDERS, li);       data.session_sell_orders = (long)li;
+      SymbolInfoDouble(sym,  SYMBOL_SESSION_TURNOVER, v);           data.session_turnover = v;
+      SymbolInfoDouble(sym,  SYMBOL_SESSION_INTEREST, v);           data.session_interest = v;
+      SymbolInfoDouble(sym,  SYMBOL_SESSION_BUY_ORDERS_VOLUME, v);  data.session_buy_orders_volume = v;
+      SymbolInfoDouble(sym,  SYMBOL_SESSION_SELL_ORDERS_VOLUME, v); data.session_sell_orders_volume = v;
+      SymbolInfoDouble(sym,  SYMBOL_SESSION_OPEN, v);               data.session_open = v;
+      SymbolInfoDouble(sym,  SYMBOL_SESSION_CLOSE, v);              data.session_close = v;
+      SymbolInfoDouble(sym,  SYMBOL_SESSION_AW, v);                 data.session_aw = v;
+      SymbolInfoDouble(sym,  SYMBOL_SESSION_PRICE_SETTLEMENT, v);   data.session_price_settlement = v;
+      SymbolInfoDouble(sym,  SYMBOL_SESSION_PRICE_LIMIT_MIN, v);    data.session_price_limit_min = v;
+      SymbolInfoDouble(sym,  SYMBOL_SESSION_PRICE_LIMIT_MAX, v);    data.session_price_limit_max = v;
+      
+       MTSymbolInfo item(data);
+       arr.put(i, item.CreateJson());
+   }
+
+   // Trả về theo “khung” response của bạn
+   return CreateSuccessResponse(arr);
+}
 
 string ExportOpenPositionsToJson()
 {
@@ -748,9 +962,16 @@ string ExportOpenPositionsToJson()
    }
 
    return CreateSuccessResponse(arr);
+   
 }
 
+
 //--------- Executors ----------------------------------------------------
+
+string Execute_SymbolsInfo()
+{
+   return ExportSymbolsToJson();
+}
 
 string Execute_GetPositions()
 {
@@ -3780,6 +4001,112 @@ public:
 private:
    string _symbol;
 };
+
+
+
+//+------------------------------------------------------------------+
+//| MTSymbolInfo                                                     |
+//+------------------------------------------------------------------+
+class MTSymbolInfo : public CObject
+{
+public:
+   MTSymbolInfo(const SymbolInFo &snap) : _d(snap) {}
+
+   virtual JSONObject* CreateJson() const
+   {
+      JSONObject *jo = new JSONObject();
+
+      // --- Identity
+      jo.put("Name",           new JSONString(_d.name));
+      jo.put("Description",    new JSONString(_d.description));
+
+      jo.put("CurrencyBase",   new JSONString(_d.currency_base));
+      jo.put("CurrencyProfit", new JSONString(_d.currency_profit));
+      jo.put("CurrencyMargin", new JSONString(_d.currency_margin));
+
+      // --- Tick
+      jo.put("Time",   new JSONString(TimeToString(_d.tick_time, TIME_DATE|TIME_SECONDS)));
+      jo.put("Bid",    new JSONNumber((double)_d.bid));
+      jo.put("Ask",    new JSONNumber((double)_d.ask));
+      jo.put("Last",   new JSONNumber((double)_d.last));
+      jo.put("Volume", new JSONNumber((double)_d.volume));
+
+      // --- Precision
+      jo.put("Digits",            new JSONNumber(_d.digits));
+      jo.put("Point",             new JSONNumber(_d.point));
+      jo.put("TickValue",         new JSONNumber(_d.tick_value));
+      jo.put("TickValueProfit",   new JSONNumber(_d.tick_value_profit));
+      jo.put("TickValueLoss",     new JSONNumber(_d.tick_value_loss));
+      jo.put("TickSize",          new JSONNumber(_d.tick_size));
+
+      // --- Lots
+      jo.put("ContractSize", new JSONNumber(_d.contract_size));
+      jo.put("LotsMin",      new JSONNumber(_d.lots_min));
+      jo.put("LotsMax",      new JSONNumber(_d.lots_max));
+      jo.put("LotsStep",     new JSONNumber(_d.lots_step));
+      jo.put("LotsLimit",    new JSONNumber(_d.lots_limit));
+
+      // --- Swaps
+      jo.put("SwapLong",   new JSONNumber(_d.swap_long));
+      jo.put("SwapShort",  new JSONNumber(_d.swap_short));
+      jo.put("SwapMode",   new JSONNumber((double)_d.swap_mode));
+      jo.put("Swap3Days",  new JSONNumber((double)_d.swap3));
+
+      // --- Trading config
+      jo.put("OrderMode",      new JSONNumber((double)_d.order_mode));
+      jo.put("TradeExecution", new JSONNumber((double)_d.trade_execution));
+      jo.put("TradeCalcMode",  new JSONNumber((double)_d.trade_calcmode));
+      jo.put("TradeMode",      new JSONNumber((double)_d.trade_mode));
+
+      // --- Flags
+      jo.put("TradeTimeFlags", new JSONNumber((double)_d.trade_time_flags));
+      jo.put("TradeFillFlags", new JSONNumber((double)_d.trade_fill_flags));
+
+      // --- Spread & depth
+      jo.put("Spread",       new JSONNumber(_d.spread));
+      jo.put("SpreadFloat",  new JSONBool(_d.spread_float));
+      jo.put("BookDepth",    new JSONNumber(_d.ticks_book_depth));
+
+      // --- High/Low
+      jo.put("BidHigh",  new JSONNumber(_d.bid_high));
+      jo.put("BidLow",   new JSONNumber(_d.bid_low));
+      jo.put("AskHigh",  new JSONNumber(_d.ask_high));
+      jo.put("AskLow",   new JSONNumber(_d.ask_low));
+      jo.put("LastHigh", new JSONNumber(_d.last_high));
+      jo.put("LastLow",  new JSONNumber(_d.last_low));
+
+      // --- Futures dates
+      jo.put("StartTime",      new JSONString(TimeToString(_d.start_time, TIME_DATE|TIME_SECONDS)));
+      jo.put("ExpirationTime", new JSONString(TimeToString(_d.expiration_time, TIME_DATE|TIME_SECONDS)));
+
+      // --- Margin
+      jo.put("MarginInitial",        new JSONNumber(_d.margin_initial));
+      jo.put("MarginMaintenance",    new JSONNumber(_d.margin_maintenance));
+      jo.put("MarginHedged",         new JSONNumber(_d.margin_hedged));
+      jo.put("MarginHedgedUseLeg",   new JSONBool(_d.margin_hedged_use_leg));
+
+      // --- Session info
+      jo.put("SessionDeals",            new JSONNumber((double)_d.session_deals));
+      jo.put("SessionBuyOrders",        new JSONNumber((double)_d.session_buy_orders));
+      jo.put("SessionSellOrders",       new JSONNumber((double)_d.session_sell_orders));
+      jo.put("SessionTurnover",         new JSONNumber(_d.session_turnover));
+      jo.put("SessionInterest",         new JSONNumber(_d.session_interest));
+      jo.put("SessionBuyOrdersVolume",  new JSONNumber(_d.session_buy_orders_volume));
+      jo.put("SessionSellOrdersVolume", new JSONNumber(_d.session_sell_orders_volume));
+      jo.put("SessionOpen",             new JSONNumber(_d.session_open));
+      jo.put("SessionClose",            new JSONNumber(_d.session_close));
+      jo.put("SessionAW",               new JSONNumber(_d.session_aw));
+      jo.put("SessionPriceSettlement",  new JSONNumber(_d.session_price_settlement));
+      jo.put("SessionPriceLimitMin",    new JSONNumber(_d.session_price_limit_min));
+      jo.put("SessionPriceLimitMax",    new JSONNumber(_d.session_price_limit_max));
+
+      return jo;
+   }
+
+private:
+   SymbolInFo _d;
+};
+
 
 class MtOpenPosition : public MtObject
 {
