@@ -9,205 +9,121 @@ namespace MtApi5
 {
     public class MT5SymbolInfo
     {
-        [JsonProperty("name")]
-        public string Name { get; set; } = string.Empty;
+        // --- Identity ---
+        [JsonProperty("Name")] public string Name { get; set; } = string.Empty;
+        [JsonProperty("Description")] public string Description { get; set; } = string.Empty;
+        [JsonProperty("CurrencyBase")] public string CurrencyBase { get; set; } = string.Empty;
+        [JsonProperty("CurrencyProfit")] public string CurrencyProfit { get; set; } = string.Empty;
+        [JsonProperty("CurrencyMargin")] public string CurrencyMargin { get; set; } = string.Empty;
 
-        [JsonProperty("currency_base")]
-        public string CurrencyBase { get; set; } = string.Empty;
+        // --- Tick ---
+        [JsonProperty("Time")] public string Time { get; set; } = string.Empty;
+        [JsonProperty("Bid")] public double Bid { get; set; }
+        [JsonProperty("Ask")] public double Ask { get; set; }
+        [JsonProperty("Last")] public double Last { get; set; }
+        [JsonProperty("Volume")] public double Volume { get; set; }
 
-        [JsonProperty("currency_profit")]
-        public string CurrencyProfit { get; set; } = string.Empty;
+        // --- Precision ---
+        [JsonProperty("Digits")] public int Digits { get; set; }
+        [JsonProperty("Point")] public double Point { get; set; }
+        [JsonProperty("TickValue")] public double TickValue { get; set; }
+        [JsonProperty("TickValueProfit")] public double TickValueProfit { get; set; }
+        [JsonProperty("TickValueLoss")] public double TickValueLoss { get; set; }
+        [JsonProperty("TickSize")] public double TickSize { get; set; }
 
-        [JsonProperty("currency_margin")]
-        public string CurrencyMargin { get; set; } = string.Empty;
+        // --- Lots ---
+        [JsonProperty("ContractSize")] public double ContractSize { get; set; }
+        [JsonProperty("LotsMin")] public double LotsMin { get; set; }
+        [JsonProperty("LotsMax")] public double LotsMax { get; set; }
+        [JsonProperty("LotsStep")] public double LotsStep { get; set; }
+        [JsonProperty("LotsLimit")] public double LotsLimit { get; set; }
 
-        [JsonProperty("bank")]
-        public string Bank { get; set; } = string.Empty;
+        // --- Swaps ---
+        [JsonProperty("SwapLong")] public double SwapLong { get; set; }
+        [JsonProperty("SwapShort")] public double SwapShort { get; set; }
 
-        [JsonProperty("description")]
-        public string Description { get; set; } = string.Empty;
+        // CHANGED: int -> double
+        [JsonProperty("SwapMode")] public double SwapModeRaw { get; set; }
+        [JsonProperty("Swap3Days")] public double Swap3DaysRaw { get; set; }
 
-        [JsonProperty("path")]
-        public string Path { get; set; } = string.Empty;
+        // --- Trading config ---
+        // CHANGED: int -> double
+        [JsonProperty("OrderMode")] public double OrderModeRaw { get; set; }
+        [JsonProperty("TradeExecution")] public double TradeExecutionRaw { get; set; }
+        [JsonProperty("TradeCalcMode")] public double TradeCalcModeRaw { get; set; }
+        [JsonProperty("TradeMode")] public double TradeModeRaw { get; set; }
 
-        // ----- Tick -----
-        [JsonProperty("tick_time")]
-        public double TickTimeRaw { get; set; }   // datetime → epoch → double
+        // --- Flags ---
+        // CHANGED: int -> double
+        [JsonProperty("TradeTimeFlags")] public double TradeTimeFlagsRaw { get; set; }
+        [JsonProperty("TradeFillFlags")] public double TradeFillFlagsRaw { get; set; }
 
-        [JsonProperty("bid")]
-        public double Bid { get; set; }
+        // --- Spread & depth ---
+        // CHANGED: int -> double (đề phòng JSONNumber đẩy "x.0")
+        [JsonProperty("Spread")] public double SpreadRaw { get; set; }
+        [JsonProperty("SpreadFloat")] public bool SpreadFloat { get; set; }
 
-        [JsonProperty("ask")]
-        public double Ask { get; set; }
+        // CHANGED: int -> double
+        [JsonProperty("BookDepth")] public double BookDepthRaw { get; set; }
 
-        [JsonProperty("last")]
-        public double Last { get; set; }
+        // --- High/Low ---
+        [JsonProperty("BidHigh")] public double BidHigh { get; set; }
+        [JsonProperty("BidLow")] public double BidLow { get; set; }
+        [JsonProperty("AskHigh")] public double AskHigh { get; set; }
+        [JsonProperty("AskLow")] public double AskLow { get; set; }
+        [JsonProperty("LastHigh")] public double LastHigh { get; set; }
+        [JsonProperty("LastLow")] public double LastLow { get; set; }
 
-        [JsonProperty("volume")]
-        public double Volume { get; set; }
+        // --- Futures dates ---
+        [JsonProperty("StartTime")] public string StartTime { get; set; } = string.Empty;
+        [JsonProperty("ExpirationTime")] public string ExpirationTime { get; set; } = string.Empty;
 
-        // ----- Price precision & unit -----
-        [JsonProperty("digits")]
-        public int Digits { get; set; }
+        // --- Margin ---
+        [JsonProperty("MarginInitial")] public double MarginInitial { get; set; }
+        [JsonProperty("MarginMaintenance")] public double MarginMaintenance { get; set; }
+        [JsonProperty("MarginHedged")] public double MarginHedged { get; set; }
+        [JsonProperty("MarginHedgedUseLeg")] public bool MarginHedgedUseLeg { get; set; }
 
-        [JsonProperty("point")]
-        public double Point { get; set; }
+        // --- Session info ---
+        [JsonProperty("SessionDeals")] public long SessionDeals { get; set; }
+        [JsonProperty("SessionBuyOrders")] public long SessionBuyOrders { get; set; }
+        [JsonProperty("SessionSellOrders")] public long SessionSellOrders { get; set; }
+        [JsonProperty("SessionTurnover")] public double SessionTurnover { get; set; }
+        [JsonProperty("SessionInterest")] public double SessionInterest { get; set; }
+        [JsonProperty("SessionBuyOrdersVolume")] public double SessionBuyOrdersVolume { get; set; }
+        [JsonProperty("SessionSellOrdersVolume")] public double SessionSellOrdersVolume { get; set; }
+        [JsonProperty("SessionOpen")] public double SessionOpen { get; set; }
+        [JsonProperty("SessionClose")] public double SessionClose { get; set; }
+        [JsonProperty("SessionAW")] public double SessionAw { get; set; }
+        [JsonProperty("SessionPriceSettlement")] public double SessionPriceSettlement { get; set; }
+        [JsonProperty("SessionPriceLimitMin")] public double SessionPriceLimitMin { get; set; }
+        [JsonProperty("SessionPriceLimitMax")] public double SessionPriceLimitMax { get; set; }
 
-        [JsonProperty("tick_value")]
-        public double TickValue { get; set; }
+        // ------------ Helpers to cast back to int (nếu cần) ------------
+        [JsonIgnore] public int SwapMode => (int)Math.Round(SwapModeRaw);
+        [JsonIgnore] public int Swap3Days => (int)Math.Round(Swap3DaysRaw);
+        [JsonIgnore] public int OrderModeInt => (int)Math.Round(OrderModeRaw);
+        [JsonIgnore] public int TradeExecution => (int)Math.Round(TradeExecutionRaw);
+        [JsonIgnore] public int TradeCalcMode => (int)Math.Round(TradeCalcModeRaw);
+        [JsonIgnore] public int TradeMode => (int)Math.Round(TradeModeRaw);
+        [JsonIgnore] public int TradeTimeFlags => (int)Math.Round(TradeTimeFlagsRaw);
+        [JsonIgnore] public int TradeFillFlags => (int)Math.Round(TradeFillFlagsRaw);
+        [JsonIgnore] public int Spread => (int)Math.Round(SpreadRaw);
+        [JsonIgnore] public int BookDepth => (int)Math.Round(BookDepthRaw);
 
-        [JsonProperty("tick_value_profit")]
-        public double TickValueProfit { get; set; }
+        // (Tuỳ chọn) Parse chuỗi thời gian của MT5
+        [JsonIgnore] public DateTime? TimeParsed => TryParseMtTime(Time);
+        [JsonIgnore] public DateTime? StartTimeParsed => TryParseMtTime(StartTime);
+        [JsonIgnore] public DateTime? ExpirationTimeParsed => TryParseMtTime(ExpirationTime);
 
-        [JsonProperty("tick_value_loss")]
-        public double TickValueLoss { get; set; }
-
-        [JsonProperty("tick_size")]
-        public double TickSize { get; set; }
-
-        // ----- Lots & contract -----
-        [JsonProperty("contract_size")]
-        public double ContractSize { get; set; }
-
-        [JsonProperty("lots_min")]
-        public double LotsMin { get; set; }
-
-        [JsonProperty("lots_max")]
-        public double LotsMax { get; set; }
-
-        [JsonProperty("lots_step")]
-        public double LotsStep { get; set; }
-
-        [JsonProperty("lots_limit")]
-        public double LotsLimit { get; set; }
-
-        // ----- Swaps -----
-        [JsonProperty("swap_long")]
-        public double SwapLong { get; set; }
-
-        [JsonProperty("swap_short")]
-        public double SwapShort { get; set; }
-
-        [JsonProperty("swap_mode")]
-        public int SwapMode { get; set; }
-
-        [JsonProperty("swap3")]
-        public int Swap3Day { get; set; }
-
-        // ----- Trading config -----
-        [JsonProperty("order_mode")]
-        public int OrderMode { get; set; }
-
-        [JsonProperty("trade_execution")]
-        public int TradeExecution { get; set; }
-
-        [JsonProperty("trade_calcmode")]
-        public int TradeCalcMode { get; set; }
-
-        [JsonProperty("trade_mode")]
-        public int TradeMode { get; set; }
-
-        // ----- Trading time / filling flags -----
-        [JsonProperty("trade_time_flags")]
-        public int TradeTimeFlags { get; set; }
-
-        [JsonProperty("trade_fill_flags")]
-        public int TradeFillFlags { get; set; }
-
-        // ----- Spread & book depth -----
-        [JsonProperty("spread")]
-        public int Spread { get; set; }
-
-        [JsonProperty("spread_float")]
-        public bool SpreadFloat { get; set; }
-
-        [JsonProperty("ticks_book_depth")]
-        public int TicksBookDepth { get; set; }
-
-        // ----- Trade levels -----
-        [JsonProperty("stops_level")]
-        public int StopsLevel { get; set; }
-
-        [JsonProperty("freeze_level")]
-        public int FreezeLevel { get; set; }
-
-        // ----- High/Low snapshots -----
-        [JsonProperty("bid_high")]
-        public double BidHigh { get; set; }
-
-        [JsonProperty("bid_low")]
-        public double BidLow { get; set; }
-
-        [JsonProperty("ask_high")]
-        public double AskHigh { get; set; }
-
-        [JsonProperty("ask_low")]
-        public double AskLow { get; set; }
-
-        [JsonProperty("last_high")]
-        public double LastHigh { get; set; }
-
-        [JsonProperty("last_low")]
-        public double LastLow { get; set; }
-
-        // ----- Futures timing -----
-        [JsonProperty("start_time")]
-        public double StartTimeRaw { get; set; }   // datetime → epoch seconds
-
-        [JsonProperty("expiration_time")]
-        public double ExpirationTimeRaw { get; set; }
-
-        // ----- Margin parameters -----
-        [JsonProperty("margin_initial")]
-        public double MarginInitial { get; set; }
-
-        [JsonProperty("margin_maintenance")]
-        public double MarginMaintenance { get; set; }
-
-        [JsonProperty("margin_hedged_use_leg")]
-        public bool MarginHedgedUseLeg { get; set; }
-
-        [JsonProperty("margin_hedged")]
-        public double MarginHedged { get; set; }
-
-        // ----- Session info -----
-        [JsonProperty("session_deals")]
-        public long SessionDeals { get; set; }
-
-        [JsonProperty("session_buy_orders")]
-        public long SessionBuyOrders { get; set; }
-
-        [JsonProperty("session_sell_orders")]
-        public long SessionSellOrders { get; set; }
-
-        [JsonProperty("session_turnover")]
-        public double SessionTurnover { get; set; }
-
-        [JsonProperty("session_interest")]
-        public double SessionInterest { get; set; }
-
-        [JsonProperty("session_buy_orders_volume")]
-        public double SessionBuyOrdersVolume { get; set; }
-
-        [JsonProperty("session_sell_orders_volume")]
-        public double SessionSellOrdersVolume { get; set; }
-
-        [JsonProperty("session_open")]
-        public double SessionOpen { get; set; }
-
-        [JsonProperty("session_close")]
-        public double SessionClose { get; set; }
-
-        [JsonProperty("session_aw")]
-        public double SessionAw { get; set; }
-
-        [JsonProperty("session_price_settlement")]
-        public double SessionPriceSettlement { get; set; }
-
-        [JsonProperty("session_price_limit_min")]
-        public double SessionPriceLimitMin { get; set; }
-
-        [JsonProperty("session_price_limit_max")]
-        public double SessionPriceLimitMax { get; set; }
+        private static DateTime? TryParseMtTime(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return null;
+            string[] fmts = { "yyyy.MM.dd HH:mm:ss", "yyyy.MM.dd HH:mm", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm" };
+            if (DateTime.TryParseExact(s, fmts, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeLocal, out var dt)) return dt;
+            if (DateTime.TryParse(s, out dt)) return dt;
+            return null;
+        }
     }
 }
