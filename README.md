@@ -229,3 +229,6 @@ namespace MtApi5Console
 
 # Telegram Channel
 https://t.me/joinchat/GfnfUxvelQCLvvIvLO16-w
+
+# RetCode  
+https://www.mql5.com/en/docs/constants/errorswarnings/enum_trade_return_codes
