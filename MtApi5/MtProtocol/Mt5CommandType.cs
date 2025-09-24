@@ -258,8 +258,16 @@ namespace MtApi5.MtProtocol
         OrderSend = 301,
         OrderSendAsync = 302,
         OrderCheck = 303,
-        Buy = 304,
-        Sell = 305,
+        Buy = 304, // market order
+        Sell = 305, // market order
+        BuyLimit = 306,
+        SellLimit = 307,
+        BuyStop = 308,
+        SellStop = 309,
+        SendModify = 310,
+        PositionClosePartial = 311,
+        Close = 312, // for pending orders
+        PositionCloseBy = 313,
 
         HistoryPosition = 401,
         GetPositions = 402,

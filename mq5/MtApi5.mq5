@@ -382,9 +382,19 @@ int preinit()
    ADD_EXECUTOR(303, OrderCheck);
    ADD_EXECUTOR(304, Buy);
    ADD_EXECUTOR(305, Sell);
+   ADD_EXECUTOR(306, BuyLimit);
+   ADD_EXECUTOR(307, SellLimit);
+   ADD_EXECUTOR(308, BuyStop);
+   ADD_EXECUTOR(309, SellStop);
+   ADD_EXECUTOR(310, SendModify);
+   ADD_EXECUTOR(311, PositionClosePartial);
+   ADD_EXECUTOR(312, Close);
+   ADD_EXECUTOR(313, PositionCloseBy);
+   
    ADD_EXECUTOR(401, HistoryPosition);
    ADD_EXECUTOR(402, GetPositions);
    ADD_EXECUTOR(403, SymbolsInfo);
+   
    return (0);
 }
 
@@ -841,6 +851,7 @@ string ExportSymbolsToJson()
       
       
       SymbolInfoDouble(sym, SYMBOL_TRADE_CONTRACT_SIZE, v); data.contract_size = v;
+
       SymbolInfoDouble(sym, SYMBOL_VOLUME_MIN, v);          data.lots_min = v;
       SymbolInfoDouble(sym, SYMBOL_VOLUME_MAX, v);          data.lots_max = v;
       SymbolInfoDouble(sym, SYMBOL_VOLUME_STEP, v);         data.lots_step = v;
@@ -856,6 +867,7 @@ string ExportSymbolsToJson()
     
       SymbolInfoInteger(sym, SYMBOL_TRADE_CALC_MODE, li);  data.trade_calcmode  = (ENUM_SYMBOL_CALC_MODE)li;
       SymbolInfoInteger(sym, SYMBOL_TRADE_MODE, li);       data.trade_mode      = (ENUM_SYMBOL_TRADE_MODE)li;
+      SymbolInfoInteger(sym, SYMBOL_TRADE_EXEMODE, li);    data.trade_execution = (ENUM_SYMBOL_TRADE_EXECUTION)li;
 
       // --- Trading time / filling flags
       SymbolInfoInteger(sym, SYMBOL_EXPIRATION_MODE, li);  data.trade_time_flags = (int)li;
@@ -3774,7 +3786,8 @@ string Execute_Buy()
    GET_DOUBLE_JSON_VALUE(jo, "Price", price);
    GET_DOUBLE_JSON_VALUE(jo, "Sl", sl);
    GET_DOUBLE_JSON_VALUE(jo, "Tp", tp);
-
+   GET_ULONG_JSON_VALUE(jo, "Magic", magic);
+   
    //Symbol
    string symbol = Symbol();
    if (jo.p.getValue("Symbol") != NULL)
@@ -3791,6 +3804,7 @@ string Execute_Buy()
 #endif
 
    CTrade trade;
+   trade.SetExpertMagicNumber(magic);
    bool ok = trade.Buy(volume, symbol, price, sl, tp, comment);
 
    MqlTradeResult trade_result={0};
@@ -3810,6 +3824,7 @@ string Execute_Sell()
    GET_DOUBLE_JSON_VALUE(jo, "Price", price);
    GET_DOUBLE_JSON_VALUE(jo, "Sl", sl);
    GET_DOUBLE_JSON_VALUE(jo, "Tp", tp);
+   GET_ULONG_JSON_VALUE(jo, "Magic", magic);
 
    //Symbol
    string symbol=Symbol();
@@ -3827,6 +3842,7 @@ string Execute_Sell()
 #endif
 
    CTrade trade;
+   trade.SetExpertMagicNumber(magic);
    bool ok = trade.Sell(volume, symbol, price, sl, tp, comment);
 
    MqlTradeResult trade_result={0};
@@ -3837,6 +3853,276 @@ string Execute_Sell()
    result_value_jo.put("Result", MqlTradeResultToJson(trade_result));
 
    return CreateSuccessResponse(result_value_jo); 
+}
+
+
+string Execute_BuyLimit()
+{
+   GET_JSON_PAYLOAD(jo);
+
+   // Required / common params
+   GET_DOUBLE_JSON_VALUE(jo, "Volume", volume);
+   GET_DOUBLE_JSON_VALUE(jo, "Price",  limit_price);   // Limit price (bắt buộc cho BuyLimit)
+   GET_DOUBLE_JSON_VALUE(jo, "Sl",     sl);
+   GET_DOUBLE_JSON_VALUE(jo, "Tp",     tp);
+   GET_ULONG_JSON_VALUE(jo, "Magic", magic);
+  
+
+   // Symbol (optional; default: current chart symbol)
+   string symbol = Symbol();
+   if (jo.p.getValue("Symbol") != NULL)
+      symbol = jo.p.getString("Symbol");
+
+   // Comment (optional)
+   string comment = "";
+   if (jo.p.getValue("Comment") != NULL)
+      comment = jo.p.getString("Comment");
+
+
+
+#ifdef __DEBUG_LOG__
+   PrintFormat("%s: symbol=%s, volume=%f, limit_price=%f, sl=%f, tp=%f, type_time=%d, expiration=%I64d, comment=%s, magic=%I64u",
+               __FUNCTION__, symbol, volume, limit_price, sl, tp, 0,0, comment, magic);
+#endif
+
+   CTrade trade;
+   if (magic > 0)
+      trade.SetExpertMagicNumber(magic);
+
+   bool ok = trade.BuyLimit(volume, limit_price, symbol, sl, tp, 0, 0, comment);
+
+   MqlTradeResult trade_result = {0};
+   trade.Result(trade_result);
+
+   JSONObject* result_value_jo = new JSONObject();
+   result_value_jo.put("RetVal",  new JSONBool(ok));
+   result_value_jo.put("Result",  MqlTradeResultToJson(trade_result));
+
+   return CreateSuccessResponse(result_value_jo);
+}
+
+string Execute_BuyStop()
+{
+   GET_JSON_PAYLOAD(jo);
+
+   // Required / common params
+   GET_DOUBLE_JSON_VALUE(jo, "Volume", volume);
+   GET_DOUBLE_JSON_VALUE(jo, "Price",  stop_price); // price for BUY_STOP
+   GET_DOUBLE_JSON_VALUE(jo, "Sl",     sl);
+   GET_DOUBLE_JSON_VALUE(jo, "Tp",     tp);
+   GET_ULONG_JSON_VALUE(jo, "Magic", magic);
+
+   // Symbol (optional; default current chart symbol)
+   string symbol = Symbol();
+   if (jo.p.getValue("Symbol") != NULL)
+      symbol = jo.p.getString("Symbol");
+
+   // Comment (optional)
+   string comment = "";
+   if (jo.p.getValue("Comment") != NULL)
+      comment = jo.p.getString("Comment");
+
+#ifdef __DEBUG_LOG__
+   PrintFormat("%s: symbol=%s, volume=%f, stop_price=%f, sl=%f, tp=%f, type_time=%d, expiration=%I64d, comment=%s, magic=%I64u",
+               __FUNCTION__, symbol, volume, stop_price, sl, tp, 0,0, comment, magic);
+#endif
+
+   CTrade trade;
+   if (magic > 0)
+      trade.SetExpertMagicNumber(magic);
+
+   bool ok = trade.BuyStop(
+      volume,
+      stop_price,
+      symbol,
+      sl,
+      tp,
+      0,
+      0,
+      comment
+   );
+
+   MqlTradeResult trade_result = {0};
+   trade.Result(trade_result);
+
+   JSONObject* result_value_jo = new JSONObject();
+   result_value_jo.put("RetVal", new JSONBool(ok));
+   result_value_jo.put("Result", MqlTradeResultToJson(trade_result));
+
+   return CreateSuccessResponse(result_value_jo);
+}
+
+// -------------------------------------------------------------------
+// Execute_SellLimit
+// -------------------------------------------------------------------
+string Execute_SellLimit()
+{
+   GET_JSON_PAYLOAD(jo);
+
+   GET_DOUBLE_JSON_VALUE(jo, "Volume", volume);
+   GET_DOUBLE_JSON_VALUE(jo, "Price",  limit_price); // price for SELL_LIMIT
+   GET_DOUBLE_JSON_VALUE(jo, "Sl",     sl);
+   GET_DOUBLE_JSON_VALUE(jo, "Tp",     tp);
+   GET_ULONG_JSON_VALUE(jo, "Magic", magic);
+
+   string symbol = Symbol();
+   if (jo.p.getValue("Symbol") != NULL)
+      symbol = jo.p.getString("Symbol");
+
+   string comment = "";
+   if (jo.p.getValue("Comment") != NULL)
+      comment = jo.p.getString("Comment");
+
+#ifdef __DEBUG_LOG__
+   PrintFormat("%s: symbol=%s, volume=%f, limit_price=%f, sl=%f, tp=%f, type_time=%d, expiration=%I64d, comment=%s, magic=%I64u",
+               __FUNCTION__, symbol, volume, limit_price, sl, tp, 0,0 comment, magic);
+#endif
+
+   CTrade trade;
+   if (magic > 0)
+      trade.SetExpertMagicNumber(magic);
+
+   bool ok = trade.SellLimit(
+      volume,
+      limit_price,
+      symbol,
+      sl,
+      tp,
+      0,
+      0,
+      comment
+   );
+
+   MqlTradeResult trade_result = {0};
+   trade.Result(trade_result);
+
+   JSONObject* result_value_jo = new JSONObject();
+   result_value_jo.put("RetVal", new JSONBool(ok));
+   result_value_jo.put("Result", MqlTradeResultToJson(trade_result));
+
+   return CreateSuccessResponse(result_value_jo);
+}
+
+// -------------------------------------------------------------------
+// Execute_SellStop
+// -------------------------------------------------------------------
+string Execute_SellStop()
+{
+   GET_JSON_PAYLOAD(jo);
+
+   GET_DOUBLE_JSON_VALUE(jo, "Volume", volume);
+   GET_DOUBLE_JSON_VALUE(jo, "Price",  stop_price); // price for SELL_STOP
+   GET_DOUBLE_JSON_VALUE(jo, "Sl",     sl);
+   GET_DOUBLE_JSON_VALUE(jo, "Tp",     tp);
+   GET_ULONG_JSON_VALUE(jo, "Magic", magic);
+
+   string symbol = Symbol();
+   if (jo.p.getValue("Symbol") != NULL)
+      symbol = jo.p.getString("Symbol");
+
+   string comment = "";
+   if (jo.p.getValue("Comment") != NULL)
+      comment = jo.p.getString("Comment");
+
+#ifdef __DEBUG_LOG__
+   PrintFormat("%s: symbol=%s, volume=%f, stop_price=%f, sl=%f, tp=%f, type_time=%d, expiration=%I64d, comment=%s, magic=%I64u",
+               __FUNCTION__, symbol, volume, stop_price, sl, tp, 0,0, comment, magic);
+#endif
+
+   CTrade trade;
+   if (magic > 0)
+      trade.SetExpertMagicNumber(magic);
+
+   bool ok = trade.SellStop(
+      volume,
+      stop_price,
+      symbol,
+      sl,
+      tp,
+      0,
+      0,
+      comment
+   );
+
+   MqlTradeResult trade_result = {0};
+   trade.Result(trade_result);
+
+   JSONObject* result_value_jo = new JSONObject();
+   result_value_jo.put("RetVal", new JSONBool(ok));
+   result_value_jo.put("Result", MqlTradeResultToJson(trade_result));
+
+   return CreateSuccessResponse(result_value_jo);
+}
+
+string Execute_SendModify()
+{                
+   GET_JSON_PAYLOAD(jo);
+   GET_ULONG_JSON_VALUE(jo, "Ticket", ticket);
+   GET_DOUBLE_JSON_VALUE(jo, "Price",  price); 
+   GET_DOUBLE_JSON_VALUE(jo, "Sl",     sl);
+   GET_DOUBLE_JSON_VALUE(jo, "Tp",     tp);
+
+
+   CTrade trade;
+      // 1) Thử ORDER (pending)
+   if(OrderSelect(ticket))
+   {
+     if(price     == 0) price     = OrderGetDouble(ORDER_PRICE_OPEN);
+     if(sl        == 0) sl        = OrderGetDouble(ORDER_SL);
+     if(tp        == 0) tp        = OrderGetDouble(ORDER_TP);
+     bool ok = trade.OrderModify(ticket, price, sl, tp, 0, 0, 0);
+     MqlTradeResult trade_result = {0};
+     trade.Result(trade_result);
+     JSONObject* result_value_jo = new JSONObject();
+     result_value_jo.put("RetVal", new JSONBool(ok));
+     result_value_jo.put("Result", MqlTradeResultToJson(trade_result));
+     return CreateSuccessResponse(result_value_jo);
+     
+   }
+   // 2) Thử POSITION (thị trường)
+   if(PositionSelectByTicket(ticket))
+   {
+         if(sl == 0) sl = PositionGetDouble(POSITION_SL);
+         if(tp == 0) tp = PositionGetDouble(POSITION_TP);
+         bool ok = trade.PositionModify(ticket, sl, tp);
+         MqlTradeResult trade_result = {0};
+         trade.Result(trade_result);
+         JSONObject* result_value_jo = new JSONObject();
+         result_value_jo.put("RetVal", new JSONBool(ok));
+         result_value_jo.put("Result", MqlTradeResultToJson(trade_result));
+         return CreateSuccessResponse(result_value_jo);
+   }
+   return CreateErrorResponse(10013,"Invalid ticket");
+}
+
+string Execute_Close()
+{
+   GET_JSON_PAYLOAD(jo);
+   GET_ULONG_JSON_VALUE(jo, "Ticket", ticket);
+   CTrade trade;
+
+   if(PositionSelectByTicket(ticket))
+   {
+      bool ok = trade.PositionClose(ticket);
+      MqlTradeResult trade_result = {0};
+      trade.Result(trade_result);
+      JSONObject* result_value_jo = new JSONObject();
+      result_value_jo.put("RetVal", new JSONBool(ok));
+      result_value_jo.put("Result", MqlTradeResultToJson(trade_result));
+      return CreateSuccessResponse(result_value_jo);
+   }
+
+   if(OrderSelect(ticket))
+   {
+      bool ok = trade.OrderDelete(ticket);
+      MqlTradeResult trade_result = {0};
+      trade.Result(trade_result);
+      JSONObject* result_value_jo = new JSONObject();
+      result_value_jo.put("RetVal", new JSONBool(ok));
+      result_value_jo.put("Result", MqlTradeResultToJson(trade_result));
+      return CreateSuccessResponse(result_value_jo);
+   }
+  return CreateErrorResponse(10013,"Invalid ticket");
 }
 
 int PositionCloseAll()
@@ -3851,6 +4137,65 @@ int PositionCloseAll()
       Sleep(50); // Relax for 50 ms
    }
    return total;
+}
+
+
+string Execute_PositionClosePartial()
+{
+   // Parse JSON input
+   GET_JSON_PAYLOAD(jo);
+   GET_ULONG_JSON_VALUE(jo, "Ticket", ticket);     // bắt buộc
+   GET_DOUBLE_JSON_VALUE(jo, "Volume", volume);    // bắt buộc
+
+#ifdef __DEBUG_LOG__
+   PrintFormat("%s: ticket=%I64u, volume=%f",
+               __FUNCTION__, ticket, volume);
+#endif
+
+   // Thực thi
+   CTrade trade;
+
+   bool ok = trade.PositionClosePartial(ticket, volume);
+
+   // Lấy kết quả chi tiết
+   MqlTradeResult trade_result = {0};
+   trade.Result(trade_result);
+
+   // Trả JSON kết quả (giữ cùng format với Execute_Sell)
+   JSONObject* result_value_jo = new JSONObject();
+   result_value_jo.put("RetVal", new JSONBool(ok));
+   result_value_jo.put("Result", MqlTradeResultToJson(trade_result));
+
+   return CreateSuccessResponse(result_value_jo);
+}
+
+
+string Execute_PositionCloseBy()
+{
+   // Parse JSON input
+   GET_JSON_PAYLOAD(jo);
+   GET_ULONG_JSON_VALUE(jo, "Ticket", ticket);       // bắt buộc: vị thế sẽ bị đóng
+   GET_ULONG_JSON_VALUE(jo, "TicketBy", ticket_by);  // bắt buộc: vị thế dùng để close-by
+
+#ifdef __DEBUG_LOG__
+   PrintFormat("%s: ticket=%I64u, ticket_by=%I64u",
+               __FUNCTION__, ticket, ticket_by);
+#endif
+
+   // Thực thi
+   CTrade trade;
+   bool ok = trade.PositionCloseBy(ticket, ticket_by);
+
+   // Lấy kết quả chi tiết
+   MqlTradeResult trade_result = {0};
+   trade.Result(trade_result);
+
+   // Trả JSON kết quả
+   JSONObject* result_value_jo = new JSONObject();
+   result_value_jo.put("RetVal", new JSONBool(ok));
+   result_value_jo.put("Result", MqlTradeResultToJson(trade_result));
+
+   return CreateSuccessResponse(result_value_jo);
 }
 
 bool OrderCloseAll()
@@ -4040,7 +4385,7 @@ public:
       jo.put("TickSize",          new JSONNumber(_d.tick_size));
 
       // --- Lots
-      jo.put("ContractSize", new JSONNumber(_d.contract_size));
+      jo.put("ContractSize", new JSONNumber((double)_d.contract_size));
       jo.put("LotsMin",      new JSONNumber(_d.lots_min));
       jo.put("LotsMax",      new JSONNumber(_d.lots_max));
       jo.put("LotsStep",     new JSONNumber(_d.lots_step));
