@@ -390,6 +390,7 @@ int preinit()
    ADD_EXECUTOR(311, PositionClosePartial);
    ADD_EXECUTOR(312, Close);
    ADD_EXECUTOR(313, PositionCloseBy);
+   ADD_EXECUTOR(314, CloseByMagic);
    
    ADD_EXECUTOR(401, HistoryPosition);
    ADD_EXECUTOR(402, GetPositions);
@@ -3805,6 +3806,7 @@ string Execute_Buy()
 
    CTrade trade;
    trade.SetExpertMagicNumber(magic);
+   trade.SetDeviationInPoints(1000);
    bool ok = trade.Buy(volume, symbol, price, sl, tp, comment);
 
    MqlTradeResult trade_result={0};
@@ -3843,6 +3845,7 @@ string Execute_Sell()
 
    CTrade trade;
    trade.SetExpertMagicNumber(magic);
+   trade.SetDeviationInPoints(1000);
    bool ok = trade.Sell(volume, symbol, price, sl, tp, comment);
 
    MqlTradeResult trade_result={0};
@@ -4124,6 +4127,52 @@ string Execute_Close()
    }
   return CreateErrorResponse(10013,"Invalid ticket");
 }
+
+string Execute_CloseByMagic()
+{
+   // 1) Đọc payload
+   GET_JSON_PAYLOAD(jo);
+   GET_LONG_JSON_VALUE(jo, "Magic", magic);
+
+   // 2) Thu thập các ticket có cùng Magic (tránh bị thay đổi PositionsTotal khi đóng)
+   int total = (int)PositionsTotal();
+   ulong tickets_to_close[];
+
+   for (int i = 0; i < total; i++)
+   {
+      ulong t = PositionGetTicket(i);
+      if (t == 0) continue;
+
+      if (!PositionSelectByTicket(t))
+         continue;
+
+      long mg = (long)PositionGetInteger(POSITION_MAGIC);
+      if (mg != magic)
+         continue;
+    
+      int n = ArraySize(tickets_to_close);
+      ArrayResize(tickets_to_close, n + 1);
+      tickets_to_close[n] = t;
+
+   }
+
+   // 3) Đóng từng position đã thu thập
+   CTrade trade;
+   JSONArray *items = new JSONArray();
+   int closed_ok = 0;
+
+   for (int k = 0; k < ArraySize(tickets_to_close); k++)
+   {
+      ulong ticket = tickets_to_close[k];
+
+      bool ok = trade.PositionClose(ticket);
+      MqlTradeResult trade_result = {0};
+      trade.Result(trade_result);
+
+   }
+   return CreateSuccessResponse(new JSONBool(true));
+}
+
 
 int PositionCloseAll()
 {

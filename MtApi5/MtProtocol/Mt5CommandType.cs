@@ -268,6 +268,7 @@ namespace MtApi5.MtProtocol
         PositionClosePartial = 311,
         Close = 312, // for pending orders
         PositionCloseBy = 313,
+        CloseByMagic = 314,
 
         HistoryPosition = 401,
         GetPositions = 402,

@@ -981,6 +981,15 @@ namespace MtApi5
             return response != null && response.RetVal;
         }
 
+        public bool CloseByMacgic(int magic)
+        {
+            var cmdParams = new Dictionary<string, object>
+            {
+                ["Magic"] = magic,
+            };
+            return SendCommand<bool>(ExecutorHandle, Mt5CommandType.CloseByMagic, cmdParams);
+        }
+
         #endregion
 
         #region Account Information functions
