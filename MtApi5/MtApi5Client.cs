@@ -799,9 +799,9 @@ namespace MtApi5
         /// <param name="tp">Take Profit price.</param>
         /// <param name="comment">Comment.</param>
         /// <returns>true - successful check of the structures, otherwise - false.</returns>
-        public bool Buy(out MqlTradeResult? result, double volume, string? symbol = null, double price = 0.0, double sl = 0.0, double tp = 0.0, string? comment = null)
+        public bool Buy(out MqlTradeResult? result, double volume, string? symbol = null, double price = 0.0, double sl = 0.0, double tp = 0.0, string? comment = null, int magic = 0)
         {
-            Dictionary<string, object> cmdParams = new() { { "Volume", volume }, { "Price", price }, { "Sl", sl }, { "Tp", tp } };
+            Dictionary<string, object> cmdParams = new() { { "Volume", volume }, { "Price", price }, { "Sl", sl }, { "Tp", tp }, { "Magic", magic } };
             if (symbol != null)
                 cmdParams["Symbol"] = symbol;
             if (comment != null)
@@ -823,10 +823,11 @@ namespace MtApi5
         /// <param name="sl">Stop Loss price.</param>
         /// <param name="tp">Take Profit price.</param>
         /// <param name="comment">Comment.</param>
+        /// <param name="magic">Expert Advisor (magic) ID. If null, server default is used.</param>
         /// <returns>true - successful check of the structures, otherwise - false.</returns>
-        public bool Sell(out MqlTradeResult? result, double volume, string? symbol = null, double price = 0.0, double sl = 0.0, double tp = 0.0, string? comment = null)
+        public bool Sell(out MqlTradeResult? result, double volume, string? symbol = null, double price = 0.0, double sl = 0.0, double tp = 0.0, string? comment = null, int magic = 0)
         {
-            Dictionary<string, object> cmdParams = new() { { "Volume", volume }, { "Price", price }, { "Sl", sl }, { "Tp", tp } };
+            Dictionary<string, object> cmdParams = new() { { "Volume", volume }, { "Price", price }, { "Sl", sl }, { "Tp", tp }, { "Magic", magic } };
             if (symbol != null)
                 cmdParams["Symbol"] = symbol;
             if (comment != null)
@@ -837,6 +838,149 @@ namespace MtApi5
             result = response?.Result;
             return response != null && response.RetVal;
         }
+
+        public bool BuyLimit(out MqlTradeResult? result, double volume, double price, string? symbol = null, double sl = 0.0, double tp = 0.0, string? comment = null, int magic = 0)
+        {
+            var cmdParams = new Dictionary<string, object>
+            {
+                ["Volume"] = volume,
+                ["Price"] = price,
+                ["Sl"] = sl,
+                ["Tp"] = tp,
+                ["Magic"] = magic,
+            };
+            if (symbol != null)
+                cmdParams["Symbol"] = symbol;
+            if (comment != null)
+                cmdParams["Comment"] = comment;
+
+            var response = SendCommand<FuncResult<MqlTradeResult>>(ExecutorHandle, Mt5CommandType.BuyLimit, cmdParams);
+
+            result = response?.Result;
+            return response != null && response.RetVal;
+        }
+
+        public bool SellLimit(out MqlTradeResult? result, double volume, double price, string? symbol = null, double sl = 0.0, double tp = 0.0, string? comment = null, int magic = 0)
+        {
+            var cmdParams = new Dictionary<string, object>
+            {
+                ["Volume"] = volume,
+                ["Price"] = price,
+                ["Sl"] = sl,
+                ["Tp"] = tp,
+                ["Magic"] = magic,
+            };
+            if (symbol != null)
+                cmdParams["Symbol"] = symbol;
+            if (comment != null)
+                cmdParams["Comment"] = comment;
+
+            var response = SendCommand<FuncResult<MqlTradeResult>>(ExecutorHandle, Mt5CommandType.SellLimit, cmdParams);
+
+            result = response?.Result;
+            return response != null && response.RetVal;
+        }
+
+        public bool BuyStop(out MqlTradeResult? result, double volume, double price, string? symbol = null, double sl = 0.0, double tp = 0.0, string? comment = null, int magic = 0)
+        {
+            var cmdParams = new Dictionary<string, object>
+            {
+                ["Volume"] = volume,
+                ["Price"] = price,
+                ["Sl"] = sl,
+                ["Tp"] = tp,
+                ["Magic"] = magic,
+            };
+            if (symbol != null)
+                cmdParams["Symbol"] = symbol;
+            if (comment != null)
+                cmdParams["Comment"] = comment;
+
+            var response = SendCommand<FuncResult<MqlTradeResult>>(ExecutorHandle, Mt5CommandType.BuyStop, cmdParams);
+
+            result = response?.Result;
+            return response != null && response.RetVal;
+        }
+
+        public bool SellStop(out MqlTradeResult? result, double volume, double price, string? symbol = null, double sl = 0.0, double tp = 0.0, string? comment = null, int magic = 0)
+        {
+            var cmdParams = new Dictionary<string, object>
+            {
+                ["Volume"] = volume,
+                ["Price"] = price,
+                ["Sl"] = sl,
+                ["Tp"] = tp,
+                ["Magic"] = magic,
+            };
+            if (symbol != null)
+                cmdParams["Symbol"] = symbol;
+            if (comment != null)
+                cmdParams["Comment"] = comment;
+
+            var response = SendCommand<FuncResult<MqlTradeResult>>(ExecutorHandle, Mt5CommandType.SellStop, cmdParams);
+
+            result = response?.Result;
+            return response != null && response.RetVal;
+        }
+
+        public bool PositionClosePartial (out MqlTradeResult? result, ulong ticket, double volume)
+        {
+            var cmdParams = new Dictionary<string, object>
+            {
+                ["Ticket"] = ticket,
+                ["Volume"] = volume,
+            };
+
+            var response = SendCommand<FuncResult<MqlTradeResult>>(ExecutorHandle, Mt5CommandType.PositionClosePartial, cmdParams);
+
+            result = response?.Result;
+            return response != null && response.RetVal;
+        }
+
+        public bool PositionCloseBy(out MqlTradeResult? result, ulong ticket, ulong ticketby)
+        {
+            var cmdParams = new Dictionary<string, object>
+            {
+                ["Ticket"] = ticket,
+                ["TicketBy"] = ticketby,
+            };
+
+            var response = SendCommand<FuncResult<MqlTradeResult>>(ExecutorHandle, Mt5CommandType.PositionCloseBy, cmdParams);
+
+            result = response?.Result;
+            return response != null && response.RetVal;
+        }
+
+
+        public bool SendClose(out MqlTradeResult? result, ulong ticket)
+        {
+            var cmdParams = new Dictionary<string, object>
+            {
+                ["Ticket"] = ticket
+            };
+
+            var response = SendCommand<FuncResult<MqlTradeResult>>(ExecutorHandle, Mt5CommandType.Close, cmdParams);
+
+            result = response?.Result;
+            return response != null && response.RetVal;
+        }
+
+        public bool SendModify(out MqlTradeResult? result, ulong ticket, double price = 0.0, double sl = 0.0, double tp = 0.0)   
+        {
+            var cmdParams = new Dictionary<string, object>
+            {
+                ["Ticket"] = ticket,
+                ["Price"] = price,
+                ["Sl"] = sl,
+                ["Tp"] = tp
+            };
+
+            var response = SendCommand<FuncResult<MqlTradeResult>>(ExecutorHandle, Mt5CommandType.SendModify, cmdParams);
+
+            result = response?.Result;
+            return response != null && response.RetVal;
+        }
+
         #endregion
 
         #region Account Information functions
