@@ -1331,6 +1331,10 @@ int ExecuteCommand()
       response = Execute_GetQuote();
    break;
    
+   case 291: // GetAllSymbols
+      response = Execute_GetAllSymbols();
+   break;
+
    default:
       Print("WARNING: Unknown command type = ", command_type);
       response = CreateErrorResponse(-1, "Unknown command type");
@@ -3850,7 +3854,7 @@ string CreateSuccessResponse(long result)
 {
    return CreateSuccessResponse(new JSONNumber(result));
 }
-
+z
 string CreateSuccessResponse(double result)
 {
    return CreateSuccessResponse(new JSONNumber(result));
@@ -4175,6 +4179,20 @@ string Execute_SymbolInfoTick()
    return CreateSuccessResponse(joTick);
 }
 
+string Execute_GetAllSymbols()
+{
+   GET_JSON_PAYLOAD(jo);
+   GET_BOOL_JSON_VALUE(jo, "OnlyMarketWatch", onlyMarketWatch);
+
+   int total = FindSymbols(allSymbols, onlyMarketWatch);
+
+   JSONArray* result = new JSONArray();
+   for (int i = 0; i < total; i++)
+      result.put(i, new JSONString(allSymbols[i]));
+
+   return CreateSuccessResponse(result);
+}
+
 string Execute_GetQuote()
 {
    MqlTick tick;
@@ -4182,4 +4200,20 @@ string Execute_GetQuote()
    
    MtQuote quote(Symbol(), tick);
    return CreateSuccessResponse(quote.CreateJson());
+}
+
+// === Globals ===
+string allSymbols[];  // mảng lưu toàn bộ symbol
+
+// Lấy danh sách symbol (onlyMarketWatch=false => tất cả; true => chỉ Market Watch)
+int FindSymbols(string &symbols[], bool onlyMarketWatch = false)
+{
+   int total = SymbolsTotal(onlyMarketWatch);
+   if (total <= 0) { ArrayResize(symbols, 0); return total; }
+
+   ArrayResize(symbols, total);
+   for (int i = 0; i < total; i++)
+      symbols[i] = SymbolName(i, onlyMarketWatch);
+
+   return total;
 }
