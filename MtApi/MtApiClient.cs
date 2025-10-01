@@ -1767,6 +1767,12 @@ namespace MtApi
             Dictionary<string, object> cmdParams = new() { { "Symbol", symbol } };
             return SendCommand<MqlTick>(ExecutorHandle, MtCommandType.SymbolInfoTick, cmdParams);
         }
+
+        public string[] GetAllSymbols(bool onlyMarketWatch = false)
+        {
+            Dictionary<string, object> cmdParams = new() { { "OnlyMarketWatch", onlyMarketWatch } };
+            return SendCommand<string[]>(ExecutorHandle, MtCommandType.GetAllSymbols, cmdParams) ?? Array.Empty<string>();
+        }
         #endregion
 
         #region Chart Operations
