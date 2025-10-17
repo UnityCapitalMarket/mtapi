@@ -3854,7 +3854,7 @@ string CreateSuccessResponse(long result)
 {
    return CreateSuccessResponse(new JSONNumber(result));
 }
-z
+
 string CreateSuccessResponse(double result)
 {
    return CreateSuccessResponse(new JSONNumber(result));

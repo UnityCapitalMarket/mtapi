@@ -8,7 +8,7 @@
 #include <Trade\SymbolInfo.mqh>
 #include <trade/trade.mqh>
 #include <CHistoryPositionInfo.mqh>
-
+#include <Trade/OrderInfo.mqh>
 #include <generic/hashmap.mqh>
 
 #import "MT5Connector.dll"
@@ -395,6 +395,7 @@ int preinit()
    ADD_EXECUTOR(401, HistoryPosition);
    ADD_EXECUTOR(402, GetPositions);
    ADD_EXECUTOR(403, SymbolsInfo);
+   ADD_EXECUTOR(404, GetpendingOrder);
    
    return (0);
 }
@@ -660,8 +661,129 @@ struct PosData
    double   Profit;
 };
 
+//-------------------------------
+// Data holder cho Order (pending/placed request)
+// Soucre COrderInfo (OrderInfo.mqh)
+//-------------------------------
+struct OrderData
+{
+   string   Symbol;
+   string   TypeDesc;        // buy/sell/buy limit/... (COrderInfo::TypeDescription)
+   string   StateDesc;       // placed/filled/partial/... (COrderInfo::StateDescription)
+   string   FillTypeDesc;    // FOK/IOC/return remainder (COrderInfo::TypeFillingDescription)
+   string   TimeTypeDesc;    // gtc/day/specified/... (COrderInfo::TypeTimeDescription)
+   string   Comment;
+   string   ExternalId;
 
-struct SymbolInFo
+   // --- Thời gian
+   datetime TimeSetup;       // ORDER_TIME_SETUP
+   datetime TimeDone;        // ORDER_TIME_DONE
+   datetime Expiration;      // ORDER_TIME_EXPIRATION
+   ulong    TimeSetupMsc;    // ORDER_TIME_SETUP_MSC
+   ulong    TimeDoneMsc;     // ORDER_TIME_DONE_MSC
+
+   // --- Kiểu & trạng thái (để xử lý logic nhanh)
+   int      OrderType;       // ENUM_ORDER_TYPE
+   int      OrderState;      // ENUM_ORDER_STATE
+   int      TypeFilling;     // ENUM_ORDER_TYPE_FILLING
+   int      TypeTime;        // ENUM_ORDER_TYPE_TIME
+
+   // --- Liên kết/nhận diện
+   ulong    Ticket;          // ORDER_TICKET (giữ cả dạng số cho tiện)
+   long     Magic;           // ORDER_MAGIC
+   long     PositionId;      // ORDER_POSITION_ID
+   long     PositionById;    // ORDER_POSITION_BY_ID
+
+   // --- Số liệu khối lượng & giá
+   double   VolumeInitial;   // ORDER_VOLUME_INITIAL
+   double   VolumeCurrent;   // ORDER_VOLUME_CURRENT
+   double   PriceOpen;       // ORDER_PRICE_OPEN (hoặc giá đặt lệnh)
+   double   StopLoss;        // ORDER_SL
+   double   TakeProfit;      // ORDER_TP
+   double   PriceCurrent;    // ORDER_PRICE_CURRENT
+   double   PriceStopLimit;  // ORDER_PRICE_STOPLIMIT
+   
+     // Reset về mặc định
+   void Reset()
+   {
+      Symbol          = "";
+      TypeDesc        = "";
+      StateDesc       = "";
+      FillTypeDesc    = "";
+      TimeTypeDesc    = "";
+      Comment         = "";
+      ExternalId      = "";
+
+      TimeSetup       = 0;
+      TimeDone        = 0;
+      Expiration      = 0;
+      TimeSetupMsc    = 0;
+      TimeDoneMsc     = 0;
+
+      OrderType       = (int)WRONG_VALUE;
+      OrderState      = (int)WRONG_VALUE;
+      TypeFilling     = (int)WRONG_VALUE;
+      TypeTime        = (int)WRONG_VALUE;
+
+      Ticket          = 0;
+      Magic           = 0;
+      PositionId      = 0;
+      PositionById    = 0;
+
+      VolumeInitial   = 0.0;
+      VolumeCurrent   = 0.0;
+      PriceOpen       = 0.0;
+      StopLoss        = 0.0;
+      TakeProfit      = 0.0;
+      PriceCurrent    = 0.0;
+      PriceStopLimit  = 0.0;
+   }
+
+   // Nạp dữ liệu từ một COrderInfo đã Select()/SelectByIndex
+   void FillFrom(const COrderInfo &oi)
+   {
+      // String trước cho dễ đọc log
+      Ticket       = oi.Ticket();
+      
+      Symbol       = oi.Symbol();
+      TypeDesc     = oi.TypeDescription();
+      StateDesc    = oi.StateDescription();
+      FillTypeDesc = oi.TypeFillingDescription();
+      TimeTypeDesc = oi.TypeTimeDescription();
+      Comment      = oi.Comment();
+      ExternalId   = oi.ExternalId();
+
+      // Time
+      TimeSetup    = oi.TimeSetup();
+      TimeDone     = oi.TimeDone();
+      Expiration   = oi.TimeExpiration();
+      TimeSetupMsc = oi.TimeSetupMsc();
+      TimeDoneMsc  = oi.TimeDoneMsc();
+
+      // Enums
+      OrderType    = (int)oi.OrderType();
+      OrderState   = (int)oi.State();
+      TypeFilling  = (int)oi.TypeFilling();
+      TypeTime     = (int)oi.TypeTime();
+
+      // Links
+      Magic        = oi.Magic();
+      PositionId   = oi.PositionId();
+      PositionById = oi.PositionById();
+
+      // Numbers
+      VolumeInitial  = oi.VolumeInitial();
+      VolumeCurrent  = oi.VolumeCurrent();
+      PriceOpen      = oi.PriceOpen();
+      StopLoss       = oi.StopLoss();
+      TakeProfit     = oi.TakeProfit();
+      PriceCurrent   = oi.PriceCurrent();
+      PriceStopLimit = oi.PriceStopLimit();
+   }
+   
+};
+
+ struct SymbolInFo
 {
    // --- Identity & description
    string  name;
@@ -978,8 +1100,47 @@ string ExportOpenPositionsToJson()
    
 }
 
-
 //--------- Executors ----------------------------------------------------
+
+string Execute_GetpendingOrder()
+{
+   return ExportOpenOrderToJson();
+}
+
+// Xuất các Open Orders (trong current order pool) sang JSON
+string ExportOpenOrderToJson()
+{
+   int total = (int)OrdersTotal();
+   JSONArray *arr = new JSONArray();
+
+   COrderInfo oi;
+
+   // Không có order nào -> trả mảng rỗng vẫn OK
+   for(int i=0; i<total; i++)
+   {
+      // Lấy ticket nhanh để lọc 0
+      ulong ticket = OrderGetTicket(i);
+      if(ticket == 0)
+         continue;
+
+      // Chọn order theo index (đồng bộ với pool hiện tại)
+      if(!oi.SelectByIndex(i))
+         continue;
+
+      // Snapshot sang OrderData
+      OrderData od;
+      od.Reset();
+      od.FillFrom(oi);
+
+      // Gói sang JSON object qua MTOrder
+      MTOrder item(od);
+      arr.put(i, item.CreateJson());
+   }
+
+   return CreateSuccessResponse(arr);
+}
+
+
 
 string Execute_SymbolsInfo()
 {
@@ -4070,9 +4231,6 @@ string Execute_SendModify()
       // 1) Thử ORDER (pending)
    if(OrderSelect(ticket))
    {
-     if(price     == 0) price     = OrderGetDouble(ORDER_PRICE_OPEN);
-     if(sl        == 0) sl        = OrderGetDouble(ORDER_SL);
-     if(tp        == 0) tp        = OrderGetDouble(ORDER_TP);
      bool ok = trade.OrderModify(ticket, price, sl, tp, 0, 0, 0);
      MqlTradeResult trade_result = {0};
      trade.Result(trade_result);
@@ -4085,8 +4243,6 @@ string Execute_SendModify()
    // 2) Thử POSITION (thị trường)
    if(PositionSelectByTicket(ticket))
    {
-         if(sl == 0) sl = PositionGetDouble(POSITION_SL);
-         if(tp == 0) tp = PositionGetDouble(POSITION_TP);
          bool ok = trade.PositionModify(ticket, sl, tp);
          MqlTradeResult trade_result = {0};
          trade.Result(trade_result);
@@ -4155,11 +4311,38 @@ string Execute_CloseByMagic()
       tickets_to_close[n] = t;
 
    }
+   // 3) Thu thập các Order ticket (pending orders) theo Magic
+   
+   ulong ord_tickets[];
+   int total_ord = (int)OrdersTotal();
+  
+   for (int i = 0; i < total_ord; i++)
+   {
+   
+      // chọn theo vị trí trong pool
+      if (!OrderGetTicket(i))
+         continue;
 
-   // 3) Đóng từng position đã thu thập
+      long mg = (long)OrderGetInteger(ORDER_MAGIC);
+      if (mg != magic)
+         continue;
+
+      // Lấy trạng thái order; chỉ xóa các lệnh đang còn "đặt"
+      ENUM_ORDER_STATE st = (ENUM_ORDER_STATE)OrderGetInteger(ORDER_STATE);
+      if (st == ORDER_STATE_PLACED || st == ORDER_STATE_PARTIAL ||
+          st == ORDER_STATE_REQUEST_ADD || st == ORDER_STATE_REQUEST_MODIFY)
+      {
+         ulong ticket = (ulong)OrderGetInteger(ORDER_TICKET);
+         int n = ArraySize(ord_tickets);
+         ArrayResize(ord_tickets, n + 1);
+         ord_tickets[n] = ticket;
+      }
+   }
+   
+   // 4) Đóng từng position đã thu thập
    CTrade trade;
    JSONArray *items = new JSONArray();
-   int closed_ok = 0;
+   //int closed_ok = 0;
 
    for (int k = 0; k < ArraySize(tickets_to_close); k++)
    {
@@ -4168,8 +4351,20 @@ string Execute_CloseByMagic()
       bool ok = trade.PositionClose(ticket);
       MqlTradeResult trade_result = {0};
       trade.Result(trade_result);
+       Sleep(50);
 
    }
+   
+   for (int k = 0; k < ArraySize(ord_tickets); k++)
+   {
+      ulong ticket = ord_tickets[k];
+      bool ok = trade.OrderDelete(ticket);
+
+      MqlTradeResult res = {0};
+      trade.Result(res);
+      Sleep(50);
+   }
+   
    return CreateSuccessResponse(new JSONBool(true));
 }
 
@@ -4419,7 +4614,7 @@ public:
       jo.put("CurrencyMargin", new JSONString(_d.currency_margin));
 
       // --- Tick
-      jo.put("Time",   new JSONString(TimeToString(_d.tick_time, TIME_DATE|TIME_SECONDS)));
+      //jo.put("Time",   new JSONString(TimeToString(_d.tick_time, TIME_DATE|TIME_SECONDS));
       jo.put("Bid",    new JSONNumber((double)_d.bid));
       jo.put("Ask",    new JSONNumber((double)_d.ask));
       jo.put("Last",   new JSONNumber((double)_d.last));
@@ -4502,6 +4697,9 @@ private:
 };
 
 
+//-------------------------------
+// JSON wrapper cho OpenPosition
+//-------------------------------
 class MtOpenPosition : public MtObject
 {
 public:
@@ -4538,6 +4736,63 @@ public:
 private:
    PosData _d;
 };
+
+//-------------------------------
+// JSON wrapper cho OrderData
+//-------------------------------
+class MTOrder : public MtObject
+{
+public:
+   MTOrder(const OrderData &od) : _d(od) {}
+
+   virtual JSONObject* CreateJson() const
+   {
+      JSONObject *jo = new JSONObject();
+
+      // --- String fields
+      jo.put("Symbol",         new JSONString(_d.Symbol));
+      jo.put("TypeDescription",new JSONString(_d.TypeDesc));
+      jo.put("StateDescription",new JSONString(_d.StateDesc));
+      jo.put("FillTypeDesc",   new JSONString(_d.FillTypeDesc));
+      jo.put("TimeTypeDesc",   new JSONString(_d.TimeTypeDesc));
+      jo.put("Comment",        new JSONString(_d.Comment));
+      jo.put("ExternalId",     new JSONString(_d.ExternalId));
+
+      // --- Time fields
+      jo.put("TimeSetup",      new JSONString(TimeToString(_d.TimeSetup,     TIME_DATE|TIME_SECONDS)));
+      jo.put("TimeDone",       new JSONString(TimeToString(_d.TimeDone,      TIME_DATE|TIME_SECONDS)));
+      jo.put("Expiration",     new JSONString(TimeToString(_d.Expiration,    TIME_DATE|TIME_SECONDS)));
+      jo.put("TimeSetupMsc",   new JSONNumber((double)_d.TimeSetupMsc));
+      jo.put("TimeDoneMsc",    new JSONNumber((double)_d.TimeDoneMsc));
+
+      // --- Enum / state fields (numeric)
+      jo.put("OrderType",      new JSONNumber((double)_d.OrderType));
+      jo.put("OrderState",     new JSONNumber((double)_d.OrderState));
+      jo.put("TypeFilling",    new JSONNumber((double)_d.TypeFilling));
+      jo.put("TypeTime",       new JSONNumber((double)_d.TypeTime));
+
+      // --- Identifiers
+      jo.put("TicketNumeric",  new JSONNumber((double)_d.Ticket));
+      jo.put("Magic",          new JSONNumber((double)_d.Magic));
+      jo.put("PositionId",     new JSONNumber((double)_d.PositionId));
+      jo.put("PositionById",   new JSONNumber((double)_d.PositionById));
+
+      // --- Volume / prices
+      jo.put("VolumeInitial",  new JSONNumber(_d.VolumeInitial));
+      jo.put("VolumeCurrent",  new JSONNumber(_d.VolumeCurrent));
+      jo.put("PriceOpen",      new JSONNumber(_d.PriceOpen));
+      jo.put("StopLoss",       new JSONNumber(_d.StopLoss));
+      jo.put("TakeProfit",     new JSONNumber(_d.TakeProfit));
+      jo.put("PriceCurrent",   new JSONNumber(_d.PriceCurrent));
+      jo.put("PriceStopLimit", new JSONNumber(_d.PriceStopLimit));
+
+      return jo;
+   }
+
+private:
+   OrderData _d;
+};
+
 
 class MtHistoryPosition : public MtObject
 {
