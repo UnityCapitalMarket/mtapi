@@ -266,12 +266,13 @@ namespace MtApi5.MtProtocol
         SellStop = 309,
         SendModify = 310,
         PositionClosePartial = 311,
-        Close = 312, // for pending orders
+        Close = 312, // for pending orders and positions
         PositionCloseBy = 313,
         CloseByMagic = 314,
 
         HistoryPosition = 401,
         GetPositions = 402,
         SymbolsInfo = 403,
+        GetpendingOrder = 404,
     }
 }

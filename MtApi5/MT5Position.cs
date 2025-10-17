@@ -20,8 +20,10 @@ namespace MtApi5
         [JsonProperty("TypeDescription")]
         public string TypeDesc { get; set; } = string.Empty;
 
-        [JsonProperty("Comment")]
-        public string Comment { get; set; } = string.Empty;
+        [JsonProperty("CloseComment")]
+        public string CloseComment { get; set; } = string.Empty;
+        [JsonProperty("OpenComment")]
+        public string OpenComment { get; set; } = string.Empty;
 
         // Chuỗi thời gian dạng "yyyy.MM.dd HH:mm:ss"
         [JsonProperty("TimeOpen")]

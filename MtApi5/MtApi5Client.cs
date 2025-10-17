@@ -494,6 +494,7 @@ namespace MtApi5
             return SendCommand<List<MT5Position>>(ExecutorHandle, Mt5CommandType.GetPositions);
         }
 
+  
         public List<MT5SymbolInfo> GetSymbolsInfo()
         {
             return SendCommand<List<MT5SymbolInfo>>(ExecutorHandle, Mt5CommandType.SymbolsInfo);
