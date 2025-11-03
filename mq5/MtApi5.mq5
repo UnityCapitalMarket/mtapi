@@ -11,6 +11,7 @@
 #include <Trade/OrderInfo.mqh>
 #include <generic/hashmap.mqh>
 
+
 #import "MT5Connector.dll"
    bool initExpert(int expertHandle, int port, string& err);
    bool deinitExpert(int expertHandle, string& err);
@@ -396,6 +397,7 @@ int preinit()
    ADD_EXECUTOR(402, GetPositions);
    ADD_EXECUTOR(403, SymbolsInfo);
    ADD_EXECUTOR(404, GetpendingOrder);
+   ADD_EXECUTOR(405, GetSymbolsName);
    
    return (0);
 }
@@ -511,6 +513,7 @@ int deinit()
 
 void OnTimer()
 {
+  
    while(true)
    {
       int executedCommand = executeCommand();
@@ -926,14 +929,69 @@ string ExportClosedPositionsToJson(datetime from_time, datetime to_time)
    return CreateSuccessResponse(arr);
 }
 
+string ExportSymbolsNamestojson(int limit, int start)
+{
 
-string ExportSymbolsToJson()
+   int total = (int)SymbolsTotal(false);
+   JSONArray *arr = new JSONArray();
+   
+   //--- Validate input
+   if(start < 0) start = 0;
+   if(limit <= 0) limit = 10; // default 10 nếu input sai
+   if(start >= total)
+   {
+      JSONArray *empty = new JSONArray();
+      return CreateSuccessResponse(empty);
+   }
+
+   int endIndex = start + limit;
+   if(endIndex > total)
+      endIndex = total;
+
+   int k = 0; // chỉ số "liền mạch" trong mảng JSON
+   for (int i = start; i < endIndex; ++i)
+   {
+      string sym = SymbolName(i, false);
+      if(!SymbolSelect(sym,true))
+      {
+         continue;
+      }
+      CSymbolInfo s ;
+  
+      if(!s.Name(sym))
+      {
+        continue;
+      }
+       
+       arr.put(k, new JSONString(sym));
+       ++k;
+   }
+   return CreateSuccessResponse(arr);
+
+}
+
+
+string ExportSymbolsToJson(int limit, int start)
 {
 
    int count = (int)SymbolsTotal(false);
    JSONArray *arr = new JSONArray();
+   
+   //--- Validate input
+   if(start < 0) start = 0;
+   if(limit <= 0) limit = 10; // default 10 nếu input sai
+   if(start >= count)
+   {
+      JSONArray *empty = new JSONArray();
+      return CreateSuccessResponse(empty);
+   }
+
+   int endIndex = start + limit;
+   if(endIndex > count)
+      endIndex = count;
+
    int k = 0; // chỉ số "liền mạch" trong mảng JSON
-   for (int i = 0; i < count; ++i)
+   for (int i = start; i < endIndex; ++i)
    {
       string sym = SymbolName(i, false);
       
@@ -947,6 +1005,7 @@ string ExportSymbolsToJson()
       {
         continue;
       }
+      
       
       s.Refresh();
       s.RefreshRates();
@@ -1041,9 +1100,10 @@ string ExportSymbolsToJson()
       SymbolInfoDouble(sym,  SYMBOL_SESSION_PRICE_SETTLEMENT, v);   data.session_price_settlement = v;
       SymbolInfoDouble(sym,  SYMBOL_SESSION_PRICE_LIMIT_MIN, v);    data.session_price_limit_min = v;
       SymbolInfoDouble(sym,  SYMBOL_SESSION_PRICE_LIMIT_MAX, v);    data.session_price_limit_max = v;
-      
+   
        MTSymbolInfo item(data);
-       arr.put(i, item.CreateJson());
+       arr.put(k, item.CreateJson());
+       ++k;
    }
 
    // Trả về theo “khung” response của bạn
@@ -1145,10 +1205,21 @@ string ExportOpenOrderToJson()
 }
 
 
+string Execute_GetSymbolsName()
+{
+   GET_JSON_PAYLOAD(jo);
+   GET_INT_JSON_VALUE(jo, "Limit", limit);
+   GET_INT_JSON_VALUE(jo, "Start", start);  
+   return ExportSymbolsNamestojson(limit,start);
+}
+
 
 string Execute_SymbolsInfo()
 {
-   return ExportSymbolsToJson();
+   GET_JSON_PAYLOAD(jo);
+   GET_INT_JSON_VALUE(jo, "Limit", limit);
+   GET_INT_JSON_VALUE(jo, "Start", start);  
+   return ExportSymbolsToJson(limit,start);
 }
 
 string Execute_GetPositions()
