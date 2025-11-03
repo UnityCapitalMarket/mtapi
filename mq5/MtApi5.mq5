@@ -619,7 +619,8 @@ struct HistPosData {
    string  TicketStr;
    string  Symbol;
    string  TypeDesc;
-   string  Comment;
+   string  CloseComment;
+   string  OpenComment;
    datetime TimeOpen;
    datetime TimeClose;
    ulong   TimeOpenMsc;
@@ -897,7 +898,8 @@ string ExportClosedPositionsToJson(datetime from_time, datetime to_time)
          d.TicketStr   = (string)hist.Ticket();
          d.Symbol      = hist.Symbol();
          d.TypeDesc    = hist.TypeDescription();
-         d.Comment = hist.OpenComment();
+         d.CloseComment = hist.CloseComment();
+         d.OpenComment = hist.OpenComment();
          d.TimeOpen    = hist.TimeOpen();
          d.TimeClose   = hist.TimeClose();
          d.TimeOpenMsc = hist.TimeOpenMsc();
@@ -945,10 +947,12 @@ string ExportSymbolsToJson()
       {
         continue;
       }
+      
       s.Refresh();
       s.RefreshRates();
       SymbolInFo data ;
       data.name = sym; 
+
       SymbolInfoString(sym, SYMBOL_CURRENCY_BASE,   data.currency_base);
       SymbolInfoString(sym, SYMBOL_CURRENCY_PROFIT, data.currency_profit);
       SymbolInfoString(sym, SYMBOL_CURRENCY_MARGIN, data.currency_margin);
@@ -4804,8 +4808,9 @@ class MtHistoryPosition : public MtObject
       jo.put("Ticket", new JSONString(_d.TicketStr));
       jo.put("Symbol", new JSONString(_d.Symbol));
       jo.put("TypeDescription", new JSONString(_d.TypeDesc));
-      jo.put("Comment", new JSONString(_d.Comment));
-
+      jo.put("CloseComment", new JSONString(_d.CloseComment));
+      jo.put("OpenComment", new JSONString(_d.OpenComment));
+      
       jo.put("TimeOpen",     new JSONString(TimeToString(_d.TimeOpen,  TIME_DATE|TIME_SECONDS)));
       jo.put("TimeClose",    new JSONString(TimeToString(_d.TimeClose, TIME_DATE|TIME_SECONDS)));
       jo.put("TimeOpenMsc",  new JSONNumber((double)_d.TimeOpenMsc));
