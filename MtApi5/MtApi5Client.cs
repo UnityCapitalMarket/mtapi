@@ -495,9 +495,18 @@ namespace MtApi5
         }
 
   
-        public List<MT5SymbolInfo> GetSymbolsInfo()
+        public List<MT5SymbolInfo> GetSymbolsInfo(int limmit =100, int start =0)
         {
-            return SendCommand<List<MT5SymbolInfo>>(ExecutorHandle, Mt5CommandType.SymbolsInfo);
+            Dictionary<string, object> cmdParams = new() { { "Limit",limmit },
+                { "Start",start } };
+            return SendCommand<List<MT5SymbolInfo>>(ExecutorHandle, Mt5CommandType.SymbolsInfo, cmdParams);
+        }
+
+        public List<string> GetSymbolsName(int limmit = 100, int start = 0)
+        {
+            Dictionary<string, object> cmdParams = new() { { "Limit",limmit },
+                { "Start",start } };
+            return SendCommand<List<string>>(ExecutorHandle, Mt5CommandType.GetSymbolsName, cmdParams);
         }
 
         ///<summary>

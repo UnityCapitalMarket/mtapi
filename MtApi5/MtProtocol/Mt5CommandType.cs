@@ -274,5 +274,6 @@ namespace MtApi5.MtProtocol
         GetPositions = 402,
         SymbolsInfo = 403,
         GetpendingOrder = 404,
+        GetSymbolsName = 405,
     }
 }
