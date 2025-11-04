@@ -984,17 +984,9 @@ string ExportSymbolsToJson(int limit, int start)
    {
       string sym = SymbolName(i, false);
       
-      if(!SymbolSelect(sym,true))
-      {
-         continue;
-      }
+ 
       CSymbolInfo s ;
-  
-      if(!s.Name(sym))
-      {
-        continue;
-      }
-      
+ 
       
       s.Refresh();
       s.RefreshRates();
