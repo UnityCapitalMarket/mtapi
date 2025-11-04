@@ -951,18 +951,7 @@ string ExportSymbolsNamestojson(int limit, int start)
    int k = 0; // chỉ số "liền mạch" trong mảng JSON
    for (int i = start; i < endIndex; ++i)
    {
-      string sym = SymbolName(i, false);
-      if(!SymbolSelect(sym,true))
-      {
-         continue;
-      }
-      CSymbolInfo s ;
-  
-      if(!s.Name(sym))
-      {
-        continue;
-      }
-       
+      string sym = SymbolName(i, false);  
        arr.put(k, new JSONString(sym));
        ++k;
    }
