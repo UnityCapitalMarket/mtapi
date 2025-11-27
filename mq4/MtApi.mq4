@@ -378,26 +378,13 @@ int OnInit()
       isCrashed = TRUE;
       return (1);
    }
-   
-   //--- Backtesting mode
-   if (IsTesting())
-   {      
-      Print("Waiting on remote client...");
-      //wait for command (BacktestingReady) from remote side to be ready for work
-      while(!IsRemoteReadyForTesting)
-      {
-         ExecuteCommand();
-         
-         //This section uses a while loop to simulate Sleep() during Backtest.
-         unsigned int viSleepUntilTick = GetTickCount() + 100; //100 milliseconds
-         while(GetTickCount() < viSleepUntilTick) 
-         {
-            //Do absolutely nothing. Just loop until the desired tick is reached.
-         }
-      }
+
+   if (!EventSetMillisecondTimer(100))
+   {
+      isCrashed = TRUE;
+      return (1);
    }
-   //--- 
-   
+
    _lastBarOpenTime = Time[0];
    
    return (INIT_SUCCEEDED);
@@ -428,49 +415,7 @@ void updateQuote()
 int _tick_count = 0;
 
 void OnTick()
-{   
-   bool lastbar_time_changed = false;
-   if (_lastBarOpenTime != Time[0])
-   {
-      double open = Open[1];
-      double close = Close[1];
-      double high = High[1];
-      double low = Low[1];
-      
-      MtTimeBar timeBar(Symbol(), _lastBarOpenTime, Time[0], open, close, high, low);
-      SendMtEvent(LAST_TIME_BAR_EVENT, timeBar);
-      
-      _lastBarOpenTime = Time[0];
-      lastbar_time_changed = true;
-   }
-   
-   updateQuote();
-
-   if (IsTesting())
-   {
-      if (BacktestingLockTicks == LOCK_EVERY_TICK ||
-         (BacktestingLockTicks == LOCK_EVERY_CANDLE  && lastbar_time_changed))
-      {
-         _is_ticks_locked = true;
-         
-         MtLockTickEvent lock_tick_event(Symbol());
-         SendMtEvent(ON_LOCK_TICKS_EVENT, lock_tick_event);
-      }
-      
-      while(true)
-      {
-         if (IsStopped())
-            break;
-      
-         int executedCommand = ExecuteCommand();
-                       
-         if (_is_ticks_locked)
-            continue;
-               
-         if (executedCommand == 0) 
-            break;
-      }
-   }
+{
 }
 
 void OnTimer()
