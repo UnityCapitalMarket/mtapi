@@ -1,7 +1,8 @@
-﻿using Newtonsoft.Json;
-using MtClient;
-using MtApi5.MtProtocol;
+﻿using MtApi5.MtProtocol;
 using MtApi5.MtProtocol.ICustomRequest;
+using MtClient;
+using Newtonsoft.Json;
+using System.Collections.Generic;
 
 namespace MtApi5
 {
@@ -499,17 +500,24 @@ namespace MtApi5
             return SendCommand<List<MT5Order>>(ExecutorHandle, Mt5CommandType.GetpendingOrder);
         }
 
-        public List<MT5SymbolInfo> GetSymbolsInfo(int limmit =100, int start =0)
+        public List<MT5Deal>? GetDealHistoriesByPosID(ulong ticketNumber)
         {
-            Dictionary<string, object> cmdParams = new() { { "Limit",limmit },
+            Dictionary<string, object> cmdParams = new() { { "TicketNumber", ticketNumber } };
+            return SendCommand<List<MT5Deal>>(ExecutorHandle, Mt5CommandType.GetDealHistories, cmdParams);
+        }
+
+
+        public List<MT5SymbolInfo> GetSymbolsInfo(int limit =100, int start =0)
+        {
+            Dictionary<string, object> cmdParams = new() { { "Limit",limit },
                 { "Start",start } };
             return SendCommand<List<MT5SymbolInfo>>(ExecutorHandle, Mt5CommandType.SymbolsInfo, cmdParams);
         }
 
 
-        public List<string> GetSymbolsName(int limmit = 100, int start = 0)
+        public List<string> GetSymbolsName(int limit = 100, int start = 0)
         {
-            Dictionary<string, object> cmdParams = new() { { "Limit",limmit },
+            Dictionary<string, object> cmdParams = new() { { "Limit",limit },
                 { "Start",start } };
             return SendCommand<List<string>>(ExecutorHandle, Mt5CommandType.GetSymbolsName, cmdParams);
         }
@@ -2382,6 +2390,7 @@ namespace MtApi5
         ///</returns>
         public int TerminalInfoInteger(ENUM_TERMINAL_INFO_INTEGER propertyId)
         {
+            
             Dictionary<string, int> cmdParams = new() { { "PropertyId", (int)propertyId } };
             return SendCommand<int>(ExecutorHandle, Mt5CommandType.TerminalInfoInteger, cmdParams);
         }
