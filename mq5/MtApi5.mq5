@@ -398,6 +398,7 @@ int preinit()
    ADD_EXECUTOR(403, SymbolsInfo);
    ADD_EXECUTOR(404, GetpendingOrder);
    ADD_EXECUTOR(405, GetSymbolsName);
+   ADD_EXECUTOR(406, GetDealHistories);
    
    return (0);
 }
@@ -665,6 +666,41 @@ struct PosData
    double   Profit;
 };
 
+//+------------------------------------------------------------------+
+//| Struct DealData                                                   |
+//| Purpose: Data container for MT5 Deal information                  |
+//+------------------------------------------------------------------+
+struct DealData
+{
+   //--- identity
+   ulong             Ticket;          // DEAL_TICKET
+   long              Order;           // DEAL_ORDER
+   long              PositionId;       // DEAL_POSITION_ID
+   long              Magic;            // DEAL_MAGIC
+
+   //--- time
+   datetime          Time;             // DEAL_TIME
+   ulong             TimeMsc;          // DEAL_TIME_MSC
+
+   //--- type & entry
+   ENUM_DEAL_TYPE    DealType;         // DEAL_TYPE
+   ENUM_DEAL_ENTRY   Entry;            // DEAL_ENTRY
+
+   //--- trade info
+   double            Volume;           // DEAL_VOLUME
+   double            Price;            // DEAL_PRICE
+   double            Commission;       // DEAL_COMMISSION
+   double            Swap;             // DEAL_SWAP
+   double            Profit;           // DEAL_PROFIT
+
+   //--- string info
+   string            Symbol;            // DEAL_SYMBOL
+   string            Comment;           // DEAL_COMMENT
+   string            ExternalId;        // DEAL_EXTERNAL_ID
+   string            TypeDesc;
+   string             EntryDesc;
+};
+
 //-------------------------------
 // Data holder cho Order (pending/placed request)
 // Soucre COrderInfo (OrderInfo.mqh)
@@ -879,6 +915,46 @@ struct OrderData
    double session_price_limit_max;
 };
 
+string ExportHistoryDealsToJson(ulong posID)
+{
+   HistorySelectByPosition(posID);
+   int total = (int)HistoryDealsTotal();
+   JSONArray *arr = new JSONArray();
+   for(int i=0; i<total; i++)
+   {
+      CDealInfo di;
+      if(!di.SelectByIndex(i))          // lấy ticket & set vào m_ticket
+         continue;
+
+      DealData d;
+      d.Ticket     = di.Ticket();
+      d.Symbol     = di.Symbol();
+      d.TypeDesc   = di.TypeDescription();
+      d.EntryDesc  = di.EntryDescription();
+      d.Comment    = di.Comment();
+      d.ExternalId = di.ExternalId();
+   
+      d.Time       = di.Time();
+      d.TimeMsc    = di.TimeMsc();
+   
+      d.DealType   = (int)di.DealType();
+      d.Entry      = (int)di.Entry();
+      d.Magic      = di.Magic();
+      d.PositionId = di.PositionId();
+      d.Order      = di.Order();
+   
+      d.Volume     = di.Volume();
+      d.Price      = di.Price();
+      d.Commission = di.Commission();
+      d.Swap       = di.Swap();
+      d.Profit     = di.Profit();
+
+      MtDeal item(d);
+      arr.put(i, item.CreateJson());
+   }
+
+   return CreateSuccessResponse(arr);
+}
 
 string ExportClosedPositionsToJson(datetime from_time, datetime to_time)
 {
@@ -984,9 +1060,7 @@ string ExportSymbolsToJson(int limit, int start)
    {
       string sym = SymbolName(i, false);
       
- 
       CSymbolInfo s ;
- 
       
       s.Refresh();
       s.RefreshRates();
@@ -999,7 +1073,6 @@ string ExportSymbolsToJson(int limit, int start)
       SymbolInfoString(sym, SYMBOL_BANK,            data.bank);
       data.description = s.Description();
       SymbolInfoString(sym, SYMBOL_PATH,            data.path);
-
       long  t=0; SymbolInfoInteger(sym, SYMBOL_TIME, t);
       data.tick_time = (datetime)t;
       data.bid   = s.Bid();
@@ -1201,6 +1274,13 @@ string Execute_SymbolsInfo()
    GET_INT_JSON_VALUE(jo, "Limit", limit);
    GET_INT_JSON_VALUE(jo, "Start", start);  
    return ExportSymbolsToJson(limit,start);
+}
+
+string Execute_GetDealHistories()
+{
+   GET_JSON_PAYLOAD(jo);
+   GET_ULONG_JSON_VALUE(jo, "TicketNumber", ticket_number);
+   return ExportHistoryDealsToJson(ticket_number);
 }
 
 string Execute_GetPositions()
@@ -4889,6 +4969,53 @@ class MtHistoryPosition : public MtObject
 
 private:
    HistPosData _d;
+};
+
+
+//+------------------------------------------------------------------+
+//| MtDeal - JSON wrapper cho DealData                               |
+//+------------------------------------------------------------------+
+class MtDeal : public MtObject
+{
+public:
+   MtDeal(const DealData &deal) : _d(deal) {}
+
+   virtual JSONObject* CreateJson() const
+   {
+      JSONObject *jo = new JSONObject();
+
+      // identity / basic info
+      jo.put("Ticket",        new JSONString((string)_d.Ticket));
+      jo.put("Symbol",        new JSONString(_d.Symbol));
+      jo.put("TypeDescription",  new JSONString(_d.TypeDesc));
+      jo.put("EntryDescription", new JSONString(_d.EntryDesc));
+      jo.put("Comment",       new JSONString(_d.Comment));
+      jo.put("ExternalId",    new JSONString(_d.ExternalId));
+
+      // time
+      jo.put("Time",          new JSONString(TimeToString(_d.Time, TIME_DATE|TIME_SECONDS)));
+      jo.put("TimeMsc",       new JSONNumber((double)_d.TimeMsc));
+
+      // types / ids
+      jo.put("DealType",      new JSONNumber((int)_d.DealType));
+      jo.put("Entry",         new JSONNumber((int)_d.Entry));
+      jo.put("Magic",         new JSONNumber(_d.Magic));
+      jo.put("PositionId",    new JSONNumber(_d.PositionId));
+      jo.put("Order",         new JSONNumber(_d.Order));
+
+      // numeric values
+      jo.put("Volume",        new JSONNumber(_d.Volume));
+      jo.put("Volume",        new JSONNumber(_d.Volume));
+      jo.put("Price",         new JSONNumber(_d.Price));
+      jo.put("Commission",    new JSONNumber(_d.Commission));
+      jo.put("Swap",          new JSONNumber(_d.Swap));
+      jo.put("Profit",        new JSONNumber(_d.Profit));
+
+      return jo;
+   }
+
+private:
+   DealData _d;
 };
 
 
