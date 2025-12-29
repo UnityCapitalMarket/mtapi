@@ -275,6 +275,7 @@ namespace MtApi5.MtProtocol
         SymbolsInfo = 403,
         GetpendingOrder = 404,
         GetSymbolsName = 405,
-        GetDealHistories = 406
+        GetDealHistories = 406,
+        IsLoginFailed = 407
     }
 }

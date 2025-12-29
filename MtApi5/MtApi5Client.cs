@@ -507,6 +507,16 @@ namespace MtApi5
         }
 
 
+        public bool IsLoginFailed(ulong login, out string failureLog)
+        {
+            Dictionary<string, object> cmdParams = new() { { "login", login } };
+
+            var response = SendCommand<FuncResult<string>>(ExecutorHandle, Mt5CommandType.IsLoginFailed, cmdParams);
+            failureLog = response?.Result ?? "";
+            return response != null && response.RetVal;
+        }
+
+
         public List<MT5SymbolInfo> GetSymbolsInfo(int limit =100, int start =0)
         {
             Dictionary<string, object> cmdParams = new() { { "Limit",limit },
