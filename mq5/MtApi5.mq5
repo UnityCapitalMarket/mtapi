@@ -399,7 +399,7 @@ int preinit()
    ADD_EXECUTOR(404, GetpendingOrder);
    ADD_EXECUTOR(405, GetSymbolsName);
    ADD_EXECUTOR(406, GetDealHistories);
-   
+   ADD_EXECUTOR(407, IsLoginFailed);   
    return (0);
 }
 
@@ -2804,6 +2804,24 @@ string Execute_iAO()
    int result = iAO(symbol, (ENUM_TIMEFRAMES)period);
    return CreateSuccessResponse(new JSONNumber(result));
 }
+
+
+string Execute_IsLoginFailed()
+{
+   GET_JSON_PAYLOAD(jo);
+   GET_LONG_JSON_VALUE(jo, "login", login);
+
+   string failureLog;
+  
+   bool ok = CheckLoginFailed(login,failureLog);
+
+   JSONObject* result_value_jo = new JSONObject();
+   result_value_jo.put("RetVal", new JSONBool(ok));
+   result_value_jo.put("Result" , new JSONString(failureLog));
+
+   return CreateSuccessResponse(result_value_jo);
+}
+
 
 string Execute_iATR()
 {
@@ -5278,4 +5296,71 @@ JSONObject* MqlRatesToJson(const MqlRates& rates)
    jo.put("spread", new JSONNumber(rates.spread));
    jo.put("real_volume", new JSONNumber(rates.real_volume));
    return jo;
+}
+
+//+------------------------------------------------------------------+
+//| Scans the log until a definitive login result is found           |
+//| Returns true if FAILED, false if SUCCESS or not found            |
+//+------------------------------------------------------------------+
+bool CheckLoginFailed(long login, string &failureLine)
+{
+    string fileName = "", latestFile = "";
+    string searchMask = "TerminalLogs\\*.log";
+    failureLine = "";
+    // 1. Find the latest log file (MT5 format: YYYYMMDD.log)
+    long searchHandle = FileFindFirst(searchMask, fileName);
+    if(searchHandle == INVALID_HANDLE) return false;
+    latestFile = fileName;
+    FileFindClose(searchHandle);
+
+    if(latestFile == "") return false;
+
+    // 2. Open with Share Read and Unicode (Best for Wine/Ubuntu)
+    int handle = FileOpen("TerminalLogs\\" + latestFile, 
+                          FILE_READ|FILE_TXT|FILE_SHARE_READ|FILE_UNICODE);
+    
+    if(handle == INVALID_HANDLE) return false;
+
+    string targetID = "'" + (string)login + "'";
+    bool resultFound = false;
+    bool isError = false;
+    
+    printf(latestFile);
+
+    // 3. Scan line by line through the whole file
+    while(!FileIsEnding(handle))
+    {
+        string line = FileReadString(handle);
+
+
+        // Filter: Must be a Network source and match our Account ID
+        if(StringFind(line, "Network") >= 0 && StringFind(line, targetID) >= 0)
+        {
+            // Check for Failure signatures
+            if(StringFind(line, "failed") >= 0 || StringFind(line, "Invalid account") >= 0)
+            {
+                failureLine = line;
+                Print("Found definitive Login Failure: ", line);
+                isError = true;
+                resultFound = true; 
+                break; // Result found, exit loop
+            }
+            
+            // Check for Success signatures
+            if(StringFind(line, "authorized") >= 0)
+            {
+                Print("Found definitive Login Success: ", line);
+              
+                isError = false;
+                resultFound = true;
+                break; // Result found, exit loop
+            }
+        }
+    }
+
+    FileClose(handle);
+    
+    // If we finished the file without finding a definitive success/fail, 
+    // it treats it as false (no failure detected yet).
+    return isError;
 }
