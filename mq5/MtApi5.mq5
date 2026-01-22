@@ -3839,9 +3839,9 @@ string Execute_OrderSend()
    result_value_jo.put("RetVal", new JSONBool(ok));
    result_value_jo.put("Result", MqlTradeResultToJson(trade_result));
    
-#ifdef __DEBUG_LOG__   
+#ifdef __DEBUG_LOG__
    PrintFormat("%s: return value = %s", __FUNCTION__, ok ? "true" : "false");
-#endif    
+#endif
       
    return CreateSuccessResponse(result_value_jo);
 }
@@ -4551,13 +4551,8 @@ string Execute_PositionClosePartial()
 #endif
 
    // Thực thi
-   CTrade trade;
-
-   bool ok = trade.PositionClosePartial(ticket, volume);
-
-   // Lấy kết quả chi tiết
-   MqlTradeResult trade_result = {0};
-   trade.Result(trade_result);
+   MqlTradeResult trade_result;
+   bool ok = PositionClosePartialByTicketRaw(trade_result ,ticket, volume);
 
    // Trả JSON kết quả (giữ cùng format với Execute_Sell)
    JSONObject* result_value_jo = new JSONObject();
@@ -5363,4 +5358,73 @@ bool CheckLoginFailed(long login, string &failureLine)
     // If we finished the file without finding a definitive success/fail, 
     // it treats it as false (no failure detected yet).
     return isError;
+}
+
+
+
+//--- core: close partial theo ticket, không dùng CTrade
+bool PositionClosePartialByTicketRaw(MqlTradeResult &out_result,const ulong ticket,
+                                     const double volume,
+                                     const ulong deviation = ULONG_MAX)
+{
+   //--- stopped?
+   if(IsStopped())
+      return(false);
+
+   //--- position exists?
+   if(!PositionSelectByTicket(ticket))
+      return(false);
+
+   string symbol  = PositionGetString(POSITION_SYMBOL);
+   string comment = PositionGetString(POSITION_COMMENT);
+   ulong magic = PositionGetInteger(POSITION_MAGIC);
+
+   //--- xác định type & giá theo BUY/SELL (giống CTrade)
+   ENUM_POSITION_TYPE pos_type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+
+   MqlTradeRequest req;
+   ZeroMemory(req);
+   ZeroMemory(out_result);
+
+   req.action   = TRADE_ACTION_DEAL;
+   req.position = ticket;
+   req.symbol   = symbol;
+   req.magic    = magic;
+   req.comment  = comment;
+
+   //--- deviation (giống CTrade: deviation==ULONG_MAX thì dùng default)
+   // Ở đây bạn truyền deviation vào từ JSON; nếu muốn default, bạn có thể giữ biến m_deviation của lớp.
+   // Tạm thời: nếu deviation==ULONG_MAX => dùng 0 (hoặc biến default của bạn).
+   req.deviation = (deviation==ULONG_MAX ? 0 : (uint)deviation);
+
+   if(pos_type==POSITION_TYPE_BUY)
+   {
+      req.type  = ORDER_TYPE_SELL;
+      req.price = SymbolInfoDouble(symbol, SYMBOL_BID);
+   }
+   else if(pos_type==POSITION_TYPE_SELL)
+   {
+      req.type  = ORDER_TYPE_BUY;
+      req.price = SymbolInfoDouble(symbol, SYMBOL_ASK);
+   }
+   else
+   {
+      return(false);
+   }
+
+   //--- check volume (giống CTrade: đóng min(position_volume, volume))
+   double position_volume = PositionGetDouble(POSITION_VOLUME);
+   double close_volume    = volume;
+   if(close_volume<=0.0)
+      return(false);
+   if(position_volume<=0.0)
+      return(false);
+   if(position_volume < close_volume)
+      close_volume = position_volume;
+
+   req.volume = close_volume;
+
+   //--- send
+   bool ok = OrderSend(req, out_result);
+   return(ok);
 }
