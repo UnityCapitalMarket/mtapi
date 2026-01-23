@@ -420,7 +420,7 @@ bool IsTesting()
 int init() 
 {
    preinit();  
-
+   
    if (TerminalInfoInteger(TERMINAL_DLLS_ALLOWED) == false) 
    {
       MessageBox("Dlls not allowed.", "MtApi", 0);
@@ -958,47 +958,103 @@ string ExportHistoryDealsToJson(ulong posID)
 
 string ExportClosedPositionsToJson(datetime from_time, datetime to_time)
 {
+   JSONArray *arr = new JSONArray();
+   int idx = 0;
+   // =========================
+   // 1. POSITION (BUY / SELL)
+   // =========================
    CHistoryPositionInfo hist;
    if(!hist.HistorySelect(from_time, to_time))
    {
-
       JSONObject *err = new JSONObject();
       err.put("Message", new JSONString("CHistoryPositionInfo::HistorySelect() failed"));
       return CreateSuccessResponse("Error", err);
    }
-   
+
    int total = hist.PositionsTotal();
-   JSONArray *arr = new JSONArray();
-   for(int i=0; i<total; i++)
+   for(int i = 0; i < total; i++)
    {
       if(hist.SelectByIndex(i))
       {
          HistPosData d;
-         d.TicketStr   = (string)hist.Ticket();
-         d.Symbol      = hist.Symbol();
-         d.TypeDesc    = hist.TypeDescription();
+         d.TicketStr    = (string)hist.Ticket();
+         d.Symbol       = hist.Symbol();
+         d.TypeDesc     = hist.TypeDescription();
+         d.OpenComment  = hist.OpenComment();
          d.CloseComment = hist.CloseComment();
-         d.OpenComment = hist.OpenComment();
-         d.TimeOpen    = hist.TimeOpen();
-         d.TimeClose   = hist.TimeClose();
-         d.TimeOpenMsc = hist.TimeOpenMsc();
-         d.TimeCloseMsc= hist.TimeCloseMsc();
-         d.PositionType= (int)hist.PositionType();
-         d.Magic       = hist.Magic();
-         d.Identifier  = hist.Identifier();
-         d.OpenReason  = (int)hist.OpenReason();
-         d.CloseReason = (int)hist.CloseReason();
-         d.Volume      = hist.Volume();
-         d.PriceOpen   = hist.PriceOpen();
-         d.SL          = hist.StopLoss();
-         d.TP          = hist.TakeProfit();
-         d.PriceClose  = hist.PriceClose();
-         d.Commission  = hist.Commission();
-         d.Swap        = hist.Swap();
-         d.Profit      = hist.Profit();
-         d.DealTicket  = hist.DealTickets();
+         d.TimeOpen     = hist.TimeOpen();
+         d.TimeClose    = hist.TimeClose();
+         d.TimeOpenMsc  = hist.TimeOpenMsc();
+         d.TimeCloseMsc = hist.TimeCloseMsc();
+         d.PositionType = (int)hist.PositionType();
+         d.Magic        = hist.Magic();
+         d.Identifier   = hist.Identifier();
+         d.OpenReason   = (int)hist.OpenReason();
+         d.CloseReason  = (int)hist.CloseReason();
+         d.Volume       = hist.Volume();
+         d.PriceOpen    = hist.PriceOpen();
+         d.SL           = hist.StopLoss();
+         d.TP           = hist.TakeProfit();
+         d.PriceClose   = hist.PriceClose();
+         d.Commission   = hist.Commission();
+         d.Swap         = hist.Swap();
+         d.Profit       = hist.Profit();
+         d.DealTicket   = hist.DealTickets();
+
          MtHistoryPosition item(d);
-         arr.put(i, item.CreateJson());
+         arr.put(idx++, item.CreateJson());
+         
+      }
+   }
+
+   // =========================
+   // 2. BALANCE (DEPOSIT / WITHDRAW)
+   // =========================
+   CHistoryBalanceDealInfo bal;
+   if(bal.HistorySelect(from_time, to_time))
+   {
+      int balTotal = bal.DealsTotal();
+      for(int i = 0; i < balTotal; i++)
+      {
+         if(bal.SelectByIndex(i))
+         {
+            HistPosData d;
+
+            double amount = bal.Amount();
+
+            d.TicketStr    = (string)bal.Ticket();
+            d.Symbol       = "BALANCE";
+            d.TypeDesc     = amount > 0 ? "deposit" : "withdraw";
+            d.OpenComment  = bal.Comment();
+            d.CloseComment = bal.Comment();
+
+            d.TimeOpen     = bal.Time();
+            d.TimeClose    = bal.Time();
+            d.TimeOpenMsc  = 0;
+            d.TimeCloseMsc = 0;
+
+            d.PositionType = -1;               // custom BALANCE
+            d.Magic        = 0;
+            d.Identifier   = 0;
+            d.OpenReason   = (int)bal.Reason();
+            d.CloseReason  = (int)bal.Reason();
+
+            d.Volume       = 0;
+            d.PriceOpen    = 0;
+            d.SL           = 0;
+            d.TP           = 0;
+            d.PriceClose   = 0;
+
+            d.Commission   = 0;
+            d.Swap         = 0;
+            d.Profit       = amount;
+
+            d.DealTicket   = (string)bal.Ticket();
+
+            MtHistoryPosition item(d);
+            arr.put(idx++, item.CreateJson());
+            
+         }
       }
    }
 
@@ -5428,3 +5484,186 @@ bool PositionClosePartialByTicketRaw(MqlTradeResult &out_result,const ulong tick
    bool ok = OrderSend(req, out_result);
    return(ok);
 }
+
+//+------------------------------------------------------------------+
+//| Lấy tổng Deposit và Withdraw                                     |
+//+------------------------------------------------------------------+
+void GetDepositWithdraw(
+    datetime from_date,
+    datetime to_date,
+    double &total_deposit,
+    double &total_withdraw
+)
+{
+    total_deposit  = 0.0;
+    total_withdraw = 0.0;
+
+    // Select history deals
+    if(!HistorySelect(from_date, to_date))
+    {
+        Print("HistorySelect failed");
+        return;
+    }
+
+    int deals = HistoryDealsTotal();
+
+    for(int i = 0; i < deals; i++)
+    {
+        ulong deal_ticket = HistoryDealGetTicket(i);
+        if(deal_ticket == 0)
+            continue;
+
+        long deal_type = HistoryDealGetInteger(deal_ticket, DEAL_TYPE);
+
+        // Chỉ quan tâm deal BALANCE
+        if(deal_type == DEAL_TYPE_BALANCE)
+        {
+            double amount = HistoryDealGetDouble(deal_ticket, DEAL_PROFIT);
+
+            if(amount > 0)
+                total_deposit += amount;     // Nạp tiền
+            else
+                total_withdraw += amount;    // Rút tiền (số âm)
+        }
+    }
+}
+
+
+//+------------------------------------------------------------------+
+//| Class CHistoryBalanceDealInfo                                    |
+//| Appointment: Access Deposit / Withdraw history                   |
+//+------------------------------------------------------------------+
+class CHistoryBalanceDealInfo : public CObject
+{
+protected:
+   ulong        m_curr_ticket;     // deal ticket
+   CArrayLong   m_tickets;
+   CDealInfo    m_deal;
+
+public:
+               CHistoryBalanceDealInfo(void);
+              ~CHistoryBalanceDealInfo(void);
+
+   //--- select
+   bool        HistorySelect(datetime from_date, datetime to_date);
+   int         DealsTotal(void) const;
+   bool        SelectByIndex(int index);
+
+   //--- properties
+   ulong       Ticket(void) const { return m_curr_ticket; }
+   datetime    Time(void);
+   double      Amount(void);
+   bool        IsDeposit(void);
+   bool        IsWithdraw(void);
+   string      Comment(void);
+   ENUM_DEAL_REASON Reason(void);
+   
+   protected:
+   bool        SelectCurrentDeal(void);
+};
+
+CHistoryBalanceDealInfo::CHistoryBalanceDealInfo(void)
+{
+   m_curr_ticket = 0;
+}
+
+CHistoryBalanceDealInfo::~CHistoryBalanceDealInfo(void)
+{
+}
+
+bool CHistoryBalanceDealInfo::HistorySelect(datetime from_date, datetime to_date)
+{
+   if(!::HistorySelect(from_date, to_date))
+   {
+      Print(__FUNCTION__, " > HistorySelect failed: ", GetLastError());
+      return false;
+   }
+
+   m_tickets.Shutdown();
+
+   int total = HistoryDealsTotal();
+   for(int i = total - 1; i >= 0; i--)
+   {
+      if(m_deal.SelectByIndex(i))
+      {
+         if(m_deal.DealType() == DEAL_TYPE_BALANCE)
+         {
+            m_tickets.Add(m_deal.Ticket());
+         }
+      }
+   }
+   return true;
+}
+
+int CHistoryBalanceDealInfo::DealsTotal(void) const
+{
+   return m_tickets.Total();
+}
+
+bool CHistoryBalanceDealInfo::SelectByIndex(int index)
+{
+   if(index < 0 || index >= m_tickets.Total())
+   {
+      m_curr_ticket = 0;
+      return false;
+   }
+
+   m_curr_ticket = m_tickets.At(index);
+   return SelectCurrentDeal();
+}
+
+bool CHistoryBalanceDealInfo::SelectCurrentDeal(void)
+{
+   int total = HistoryDealsTotal();
+   for(int i = 0; i < total; i++)
+   {
+      if(m_deal.SelectByIndex(i))
+      {
+         if(m_deal.Ticket() == m_curr_ticket)
+            return true;
+      }
+   }
+   return false;
+}
+datetime CHistoryBalanceDealInfo::Time(void)
+{
+   if(SelectCurrentDeal())
+      return m_deal.Time();
+   return 0;
+}
+
+double CHistoryBalanceDealInfo::Amount(void)
+{
+   if(SelectCurrentDeal())
+      return m_deal.Profit(); // + deposit / - withdraw
+   return 0;
+}
+
+bool CHistoryBalanceDealInfo::IsDeposit(void)
+{
+   return Amount() > 0;
+}
+
+bool CHistoryBalanceDealInfo::IsWithdraw(void)
+{
+   return Amount() < 0;
+}
+
+string CHistoryBalanceDealInfo::Comment(void)
+{
+   if(SelectCurrentDeal())
+      return m_deal.Comment();
+   return "";
+}
+
+ENUM_DEAL_REASON CHistoryBalanceDealInfo::Reason(void)
+{
+   long r;
+   if(SelectCurrentDeal() && m_deal.InfoInteger(DEAL_REASON, r))
+      return (ENUM_DEAL_REASON)r;
+   return WRONG_VALUE;
+}
+
+//+------------------------------------------------------------------+
+//| Class CHistoryBalanceDealInfo                                    |
+//+------------------------------------------------------------------+
