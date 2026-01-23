@@ -1,0 +1,54 @@
+name: MtApi5 Release Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build-release:
+    runs-on: windows-2022
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore MtApi5/MtApi5.csproj
+
+      - name: Build (Release)
+        run: dotnet build MtApi5/MtApi5.csproj -c Release --no-restore -p:SolutionDir="$env:GITHUB_WORKSPACE\"
+
+      - name: Zip build output
+        shell: pwsh
+        run: |
+          $configuration = "Release"
+          $targetFramework = "netstandard2.0"
+          $outputDir = Join-Path $env:GITHUB_WORKSPACE "build\products\$configuration\$targetFramework"
+          if (!(Test-Path $outputDir)) {
+            Write-Error "Build output not found: $outputDir"
+          }
+
+          $artifactDir = Join-Path $env:GITHUB_WORKSPACE "build\artifacts"
+          New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
+
+          $zipPath = Join-Path $artifactDir "MtApi5-$configuration.zip"
+          if (Test-Path $zipPath) {
+            Remove-Item $zipPath -Force
+          }
+
+          Compress-Archive -Path (Join-Path $outputDir "*") -DestinationPath $zipPath
+          Write-Host "Created $zipPath"
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MtApi5-Release
+          path: build\artifacts\MtApi5-Release.zip
+          if-no-files-found: error
