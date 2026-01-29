@@ -5545,7 +5545,7 @@ bool CHistoryBalanceDealInfo::HistorySelect(datetime from_date, datetime to_date
    {
       if(m_deal.SelectByIndex(i))
       {
-         if(m_deal.DealType() != DEAL_TYPE_BUY || m_deal.DealType() != DEAL_TYPE_SELL)
+         if(m_deal.DealType() != DEAL_TYPE_BUY && m_deal.DealType() != DEAL_TYPE_SELL)
          {
             m_tickets.Add(m_deal.Ticket());
          }
