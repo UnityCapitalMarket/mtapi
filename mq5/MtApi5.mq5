@@ -1023,8 +1023,8 @@ string ExportClosedPositionsToJson(datetime from_time, datetime to_time)
             double amount = bal.Amount();
 
             d.TicketStr    = (string)bal.Ticket();
-            d.Symbol       = "BALANCE";
-            d.TypeDesc     = amount > 0 ? "deposit" : "withdraw";
+            d.Symbol       = "";
+            d.TypeDesc     = bal.TypeDescription();
             d.OpenComment  = bal.Comment();
             d.CloseComment = bal.Comment();
 
@@ -1033,7 +1033,7 @@ string ExportClosedPositionsToJson(datetime from_time, datetime to_time)
             d.TimeOpenMsc  = 0;
             d.TimeCloseMsc = 0;
 
-            d.PositionType = -1;               // custom BALANCE
+            d.PositionType = bal.DealType();
             d.Magic        = 0;
             d.Identifier   = 0;
             d.OpenReason   = (int)bal.Reason();
@@ -5485,48 +5485,6 @@ bool PositionClosePartialByTicketRaw(MqlTradeResult &out_result,const ulong tick
    return(ok);
 }
 
-//+------------------------------------------------------------------+
-//| Lấy tổng Deposit và Withdraw                                     |
-//+------------------------------------------------------------------+
-void GetDepositWithdraw(
-    datetime from_date,
-    datetime to_date,
-    double &total_deposit,
-    double &total_withdraw
-)
-{
-    total_deposit  = 0.0;
-    total_withdraw = 0.0;
-
-    // Select history deals
-    if(!HistorySelect(from_date, to_date))
-    {
-        Print("HistorySelect failed");
-        return;
-    }
-
-    int deals = HistoryDealsTotal();
-
-    for(int i = 0; i < deals; i++)
-    {
-        ulong deal_ticket = HistoryDealGetTicket(i);
-        if(deal_ticket == 0)
-            continue;
-
-        long deal_type = HistoryDealGetInteger(deal_ticket, DEAL_TYPE);
-
-        // Chỉ quan tâm deal BALANCE
-        if(deal_type == DEAL_TYPE_BALANCE)
-        {
-            double amount = HistoryDealGetDouble(deal_ticket, DEAL_PROFIT);
-
-            if(amount > 0)
-                total_deposit += amount;     // Nạp tiền
-            else
-                total_withdraw += amount;    // Rút tiền (số âm)
-        }
-    }
-}
 
 
 //+------------------------------------------------------------------+
@@ -5553,11 +5511,12 @@ public:
    ulong       Ticket(void) const { return m_curr_ticket; }
    datetime    Time(void);
    double      Amount(void);
-   bool        IsDeposit(void);
-   bool        IsWithdraw(void);
+   string      TypeDescription();
+   ENUM_DEAL_TYPE    DealType(void);
+   
    string      Comment(void);
    ENUM_DEAL_REASON Reason(void);
-   
+ 
    protected:
    bool        SelectCurrentDeal(void);
 };
@@ -5586,7 +5545,7 @@ bool CHistoryBalanceDealInfo::HistorySelect(datetime from_date, datetime to_date
    {
       if(m_deal.SelectByIndex(i))
       {
-         if(m_deal.DealType() == DEAL_TYPE_BALANCE)
+         if(m_deal.DealType() != DEAL_TYPE_BUY || m_deal.DealType() != DEAL_TYPE_SELL)
          {
             m_tickets.Add(m_deal.Ticket());
          }
@@ -5639,16 +5598,6 @@ double CHistoryBalanceDealInfo::Amount(void)
    return 0;
 }
 
-bool CHistoryBalanceDealInfo::IsDeposit(void)
-{
-   return Amount() > 0;
-}
-
-bool CHistoryBalanceDealInfo::IsWithdraw(void)
-{
-   return Amount() < 0;
-}
-
 string CHistoryBalanceDealInfo::Comment(void)
 {
    if(SelectCurrentDeal())
@@ -5663,6 +5612,77 @@ ENUM_DEAL_REASON CHistoryBalanceDealInfo::Reason(void)
       return (ENUM_DEAL_REASON)r;
    return WRONG_VALUE;
 }
+
+//+------------------------------------------------------------------+
+//| Get the property value "DEAL_TYPE"                               |
+//+------------------------------------------------------------------+
+ENUM_DEAL_TYPE CHistoryBalanceDealInfo::DealType(void)
+  {
+      if(SelectCurrentDeal())
+         return m_deal.DealType();
+      return WRONG_VALUE;
+  }
+//+------------------------------------------------------------------+
+//| Get the property value "DEAL_TYPE" as string                     |
+//+------------------------------------------------------------------+
+string CHistoryBalanceDealInfo::TypeDescription(void)
+  {
+   string str;
+//---
+   switch(DealType())
+     {
+      case DEAL_TYPE_BUY:
+         str="Buy type";
+         break;
+      case DEAL_TYPE_SELL:
+         str="Sell type";
+         break;
+      case DEAL_TYPE_BALANCE:
+         str="Balance type";
+         break;
+      case DEAL_TYPE_CREDIT:
+         str="Credit type";
+         break;
+      case DEAL_TYPE_CHARGE:
+         str="Charge type";
+         break;
+      case DEAL_TYPE_CORRECTION:
+         str="Correction type";
+         break;
+      case DEAL_TYPE_BONUS:
+         str="Bonus type";
+         break;
+      case DEAL_TYPE_COMMISSION:
+         str="Commission type";
+         break;
+      case DEAL_TYPE_COMMISSION_DAILY:
+         str="Daily Commission type";
+         break;
+      case DEAL_TYPE_COMMISSION_MONTHLY:
+         str="Monthly Commission type";
+         break;
+      case DEAL_TYPE_COMMISSION_AGENT_DAILY:
+         str="Daily Agent Commission type";
+         break;
+      case DEAL_TYPE_COMMISSION_AGENT_MONTHLY:
+         str="Monthly Agent Commission type";
+         break;
+      case DEAL_TYPE_INTEREST:
+         str="Interest Rate type";
+         break;
+      case DEAL_TYPE_BUY_CANCELED:
+         str="Canceled Buy type";
+         break;
+      case DEAL_TYPE_SELL_CANCELED:
+         str="Canceled Sell type";
+         break;
+      default:
+         str="Unknown type";
+     }
+//---
+   return(str);
+  }
+
 
 //+------------------------------------------------------------------+
 //| Class CHistoryBalanceDealInfo                                    |
