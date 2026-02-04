@@ -1,0 +1,170 @@
+name: Build MQL5
+
+on:
+  push:
+    paths:
+      - "mq5/**"
+      - ".github/workflows/build-mql5.yml"
+  pull_request:
+    paths:
+      - "mq5/**"
+      - ".github/workflows/build-mql5.yml"
+  workflow_dispatch:
+
+jobs:
+  build-mql5:
+    name: Compile MtApi5.mq5
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+
+    env:
+      SOURCE_FILE: mq5/MtApi5.mq5
+      OUTPUT_FILE: mq5/MtApi5.ex5
+      MT5_INSTALL_DIR: ${{ runner.temp }}\MetaTrader5
+      MT5_INSTALLER_PATH: ${{ runner.temp }}\mt5setup.exe
+      COMPILE_LOG: ${{ runner.temp }}\metaeditor-compile.log
+
+    steps:
+      # --------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------------------------
+      - name: Download MetaTrader 5 installer
+        shell: pwsh
+        run: |
+          $ProgressPreference = "SilentlyContinue"
+
+          $urls = @(
+            "https://download.terminal.free/cdn/web/metaquotes.ltd/mt5/mt5setup.exe",
+            "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe"
+          )
+
+          $downloaded = $false
+          foreach ($url in $urls) {
+            try {
+              Write-Host "Attempting download from: $url"
+              Invoke-WebRequest -Uri $url -OutFile "${env:MT5_INSTALLER_PATH}"
+              if ((Test-Path "${env:MT5_INSTALLER_PATH}") -and ((Get-Item "${env:MT5_INSTALLER_PATH}").Length -gt 0)) {
+                $downloaded = $true
+                break
+              }
+            } catch {
+              Write-Warning "Download failed from $url : $($_.Exception.Message)"
+            }
+          }
+
+          if (-not $downloaded) {
+            throw "Failed to download MetaTrader 5 installer from all known URLs."
+          }
+
+      # --------------------------------------------------------------------
+      - name: Install MetaTrader 5 silently
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:MT5_INSTALLER_PATH}")) {
+            throw "Installer not found: ${env:MT5_INSTALLER_PATH}"
+          }
+
+          New-Item -ItemType Directory -Path "${env:MT5_INSTALL_DIR}" -Force | Out-Null
+
+          $installArgs = @(
+            "/auto",
+            "/path:`"${env:MT5_INSTALL_DIR}`""
+          )
+
+          $proc = Start-Process -FilePath "${env:MT5_INSTALLER_PATH}" -ArgumentList $installArgs -Wait -PassThru
+          if ($proc.ExitCode -ne 0) {
+            throw "MetaTrader 5 installation failed with exit code $($proc.ExitCode)."
+          }
+
+      # --------------------------------------------------------------------
+      - name: Resolve metaeditor64.exe path
+        id: metaeditor
+        shell: pwsh
+        run: |
+          $preferred = Join-Path "${env:MT5_INSTALL_DIR}" "metaeditor64.exe"
+          if (Test-Path $preferred) {
+            $metaEditor = $preferred
+          } else {
+            $roots = @("${env:MT5_INSTALL_DIR}", "C:\Program Files", "C:\Program Files (x86)")
+            $metaEditor = Get-ChildItem -Path $roots -Filter "metaeditor64.exe" -File -Recurse -ErrorAction SilentlyContinue |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
+
+          if (-not $metaEditor) {
+            throw "metaeditor64.exe not found after installation."
+          }
+
+          "path=$metaEditor" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Using MetaEditor: $metaEditor"
+
+      # --------------------------------------------------------------------
+      - name: Compile mq5/MtApi5.mq5 to MtApi5.ex5
+        shell: pwsh
+        run: |
+          $source = Join-Path $env:GITHUB_WORKSPACE "${env:SOURCE_FILE}"
+          $output = Join-Path $env:GITHUB_WORKSPACE "${env:OUTPUT_FILE}"
+          $includeDir = Split-Path -Path $source -Parent
+          $log = "${env:COMPILE_LOG}"
+          $metaEditor = "${{ steps.metaeditor.outputs.path }}"
+
+          if (-not (Test-Path $source)) {
+            throw "Source file not found: $source"
+          }
+          if (-not (Test-Path $metaEditor)) {
+            throw "MetaEditor not found: $metaEditor"
+          }
+
+          $compileArgs = @(
+            "/compile:`"$source`"",
+            "/include:`"$includeDir`"",
+            "/log:`"$log`"",
+            "/s"
+          )
+
+          $proc = Start-Process -FilePath $metaEditor -ArgumentList $compileArgs -Wait -PassThru
+          if ($proc.ExitCode -ne 0) {
+            if (Test-Path $log) { Get-Content $log | Write-Host }
+            throw "MetaEditor exited with non-zero code: $($proc.ExitCode)"
+          }
+
+          if (-not (Test-Path $output)) {
+            if (Test-Path $log) { Get-Content $log | Write-Host }
+            throw "Expected output file not found: $output"
+          }
+
+          if ((Get-Item $output).Length -le 0) {
+            throw "Output file exists but is empty: $output"
+          }
+
+          if (Test-Path $log) {
+            $logText = Get-Content $log -Raw
+            if (
+              $logText -match "(?im)\b([1-9]\d*)\s+errors?\b" -or
+              $logText -match "(?im):\s*error\s+\d+\b"
+            ) {
+              Write-Host $logText
+              throw "Compilation failed: compiler reported errors."
+            }
+          }
+
+      # --------------------------------------------------------------------
+      - name: Upload MtApi5.ex5 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MtApi5-ex5
+          path: mq5/MtApi5.ex5
+          if-no-files-found: error
+
+      # --------------------------------------------------------------------
+      - name: Upload compile log (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mql5-compile-log
+          path: ${{ runner.temp }}\metaeditor-compile.log
+          if-no-files-found: ignore
