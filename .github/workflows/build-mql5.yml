@@ -23,9 +23,10 @@ jobs:
     env:
       SOURCE_FILE: mq5/MtApi5.mq5
       OUTPUT_FILE: mq5/MtApi5.ex5
-      MT5_INSTALL_DIR: ${{ runner.temp }}\MetaTrader5
-      MT5_INSTALLER_PATH: ${{ runner.temp }}\mt5setup.exe
-      COMPILE_LOG: ${{ runner.temp }}\metaeditor-compile.log
+      MT5_INSTALL_DIR: ${{ env.RUNNER_TEMP }}\MetaTrader5
+      MT5_INSTALLER_PATH: ${{ env.RUNNER_TEMP }}\mt5setup.exe
+      COMPILE_LOG: ${{ env.RUNNER_TEMP }}\metaeditor-compile.log
+
 
     steps:
       # --------------------------------------------------------------------
