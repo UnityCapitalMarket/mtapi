@@ -145,12 +145,50 @@ jobs:
           Write-Host "Using MetaEditor: $metaEditor"
 
       # --------------------------------------------------------------------
+      - name: Stage vendored include tree
+        id: stage_includes
+        shell: pwsh
+        run: |
+          $repoMq5 = Join-Path $env:GITHUB_WORKSPACE "mq5"
+          $vendorInclude = Join-Path $repoMq5 "Include"
+          $stageRoot = Join-Path $env:RUNNER_TEMP "mql5-stage"
+          $stageInclude = Join-Path $stageRoot "Include"
+
+          if (-not (Test-Path $vendorInclude)) {
+            throw "Vendored include directory is missing: $vendorInclude"
+          }
+
+          Remove-Item -Path $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $stageInclude -Force | Out-Null
+          Copy-Item -Path (Join-Path $vendorInclude "*") -Destination $stageInclude -Recurse -Force
+
+          $requiredHeaders = @(
+            "json.mqh",
+            "hash.mqh",
+            "CHistoryPositionInfo.mqh",
+            "Trade\SymbolInfo.mqh",
+            "Trade\OrderInfo.mqh",
+            "Trade\Trade.mqh",
+            "generic\hashmap.mqh"
+          )
+
+          foreach ($header in $requiredHeaders) {
+            $headerPath = Join-Path $stageInclude $header
+            if (-not (Test-Path $headerPath)) {
+              throw "Missing vendored header in mq5/Include: $header"
+            }
+          }
+
+          "root=$stageRoot" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Using staged include root: $stageRoot"
+
+      # --------------------------------------------------------------------
       - name: Compile mq5/MtApi5.mq5 to MtApi5.ex5
         shell: pwsh
         run: |
           $source = Join-Path $env:GITHUB_WORKSPACE "${env:SOURCE_FILE}"
           $output = Join-Path $env:GITHUB_WORKSPACE "${env:OUTPUT_FILE}"
-          $includeDir = Split-Path -Path $source -Parent
+          $includeRoot = "${{ steps.stage_includes.outputs.root }}"
           $log = "${env:COMPILE_LOG}"
           $metaEditor = "${{ steps.metaeditor.outputs.path }}"
 
@@ -160,10 +198,16 @@ jobs:
           if (-not (Test-Path $metaEditor)) {
             throw "MetaEditor not found: $metaEditor"
           }
+          if (-not $includeRoot) {
+            throw "Staged include root output is empty."
+          }
+          if (-not (Test-Path $includeRoot)) {
+            throw "Staged include root not found: $includeRoot"
+          }
 
           $compileArgs = @(
             "/compile:`"$source`"",
-            "/include:`"$includeDir`"",
+            "/include:`"$includeRoot`"",
             "/log:`"$log`"",
             "/s"
           )
