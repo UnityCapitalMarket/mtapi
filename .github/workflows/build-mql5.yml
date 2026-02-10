@@ -78,16 +78,46 @@ jobs:
             throw "Installer not found: ${env:MT5_INSTALLER_PATH}"
           }
 
+          $installerInfo = Get-Item "${env:MT5_INSTALLER_PATH}"
+          Write-Host "Installer: $($installerInfo.FullName)"
+          Write-Host "Installer size: $($installerInfo.Length) bytes"
+
           New-Item -ItemType Directory -Path "${env:MT5_INSTALL_DIR}" -Force | Out-Null
 
-          $installArgs = @(
-            "/auto",
-            "/path:`"${env:MT5_INSTALL_DIR}`""
+          $attempts = @(
+            @("/auto", "/path:`"${env:MT5_INSTALL_DIR}`""),
+            @("/auto", "/portable", "/path:`"${env:MT5_INSTALL_DIR}`"")
           )
 
-          $proc = Start-Process -FilePath "${env:MT5_INSTALLER_PATH}" -ArgumentList $installArgs -Wait -PassThru
-          if ($proc.ExitCode -ne 0) {
-            throw "MetaTrader 5 installation failed with exit code $($proc.ExitCode)."
+          $metaEditor = $null
+          $exitCodes = @()
+
+          foreach ($attempt in $attempts) {
+            Write-Host "Running installer with args: $($attempt -join ' ')"
+            $proc = Start-Process -FilePath "${env:MT5_INSTALLER_PATH}" -ArgumentList $attempt -Wait -PassThru
+            $exitCodes += $proc.ExitCode
+            Write-Host "Installer exited with code: $($proc.ExitCode)"
+
+            $candidatePaths = @(
+              (Join-Path "${env:MT5_INSTALL_DIR}" "metaeditor64.exe"),
+              (Join-Path "${env:MT5_INSTALL_DIR}" "MetaEditor64.exe")
+            )
+            $metaEditor = $candidatePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+            if ($metaEditor) {
+              break
+            }
+          }
+
+          if (-not $metaEditor) {
+            Write-Warning "MetaTrader installation did not produce metaeditor64.exe under ${env:MT5_INSTALL_DIR}."
+            $dir = "${env:MT5_INSTALL_DIR}"
+            if (Test-Path $dir) {
+              Write-Host "Install dir content snapshot:"
+              Get-ChildItem -Path $dir -Recurse -ErrorAction SilentlyContinue |
+                Select-Object -First 50 -ExpandProperty FullName |
+                ForEach-Object { Write-Host $_ }
+            }
+            throw "MetaTrader 5 installation failed. Exit codes: $($exitCodes -join ', ')"
           }
 
       # --------------------------------------------------------------------
@@ -99,7 +129,14 @@ jobs:
           if (Test-Path $preferred) {
             $metaEditor = $preferred
           } else {
-            $roots = @("${env:MT5_INSTALL_DIR}", "C:\Program Files", "C:\Program Files (x86)")
+            $roots = @(
+              "${env:MT5_INSTALL_DIR}",
+              "C:\Program Files",
+              "C:\Program Files (x86)",
+              "$env:APPDATA\MetaQuotes\Terminal",
+              "$env:LOCALAPPDATA\MetaQuotes\Terminal",
+              "$env:LOCALAPPDATA\Programs"
+            )
             $metaEditor = Get-ChildItem -Path $roots -Filter "metaeditor64.exe" -File -Recurse -ErrorAction SilentlyContinue |
               Select-Object -First 1 -ExpandProperty FullName
           }
