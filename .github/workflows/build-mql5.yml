@@ -1,10 +1,6 @@
 name: Build MQL5
 
 on:
-  push:
-    paths:
-      - "mq5/**"
-      - ".github/workflows/build-mql5.yml"
   pull_request:
     paths:
       - "mq5/**"
