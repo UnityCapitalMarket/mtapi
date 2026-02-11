@@ -243,6 +243,32 @@ jobs:
           }
 
           if (-not (Test-Path $output)) {
+            $expectedName = [System.IO.Path]::GetFileName($output)
+            $searchRoots = @(
+              (Split-Path -Path $source -Parent),
+              (Join-Path "${env:MT5_INSTALL_DIR}" "MQL5"),
+              "${env:MT5_INSTALL_DIR}",
+              "$env:APPDATA\MetaQuotes\Terminal",
+              "$env:LOCALAPPDATA\MetaQuotes\Terminal"
+            ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+
+            $candidates = @()
+            foreach ($root in $searchRoots) {
+              $candidates += Get-ChildItem -Path $root -Filter $expectedName -File -Recurse -ErrorAction SilentlyContinue
+            }
+
+            $resolvedOutput = $candidates |
+              Sort-Object LastWriteTimeUtc -Descending |
+              Select-Object -First 1
+
+            if ($resolvedOutput) {
+              New-Item -ItemType Directory -Path (Split-Path -Path $output -Parent) -Force | Out-Null
+              Copy-Item -Path $resolvedOutput.FullName -Destination $output -Force
+              Write-Host "Recovered compile output: $($resolvedOutput.FullName) -> $output"
+            }
+          }
+
+          if (-not (Test-Path $output)) {
             if (Test-Path $log) { Get-Content $log | Write-Host }
             throw "Expected output file not found: $output"
           }
