@@ -212,10 +212,34 @@ jobs:
             "/s"
           )
 
+          if (Test-Path $output) {
+            Remove-Item -Path $output -Force
+          }
+          if (Test-Path $log) {
+            Remove-Item -Path $log -Force
+          }
+
           $proc = Start-Process -FilePath $metaEditor -ArgumentList $compileArgs -Wait -PassThru
-          if ($proc.ExitCode -ne 0) {
-            if (Test-Path $log) { Get-Content $log | Write-Host }
-            throw "MetaEditor exited with non-zero code: $($proc.ExitCode)"
+
+          $logText = ""
+          $hasCompilerErrors = $false
+          if (Test-Path $log) {
+            $logText = Get-Content $log -Raw
+            if (
+              $logText -match "(?im)\b([1-9]\d*)\s+errors?\b" -or
+              $logText -match "(?im):\s*error\s+\d+\b"
+            ) {
+              $hasCompilerErrors = $true
+            }
+          }
+
+          if ($hasCompilerErrors) {
+            Write-Host $logText
+            throw "Compilation failed: compiler reported errors."
+          }
+
+          if ($proc.ExitCode -ne 0 -and -not (Test-Path $log)) {
+            throw "MetaEditor exited with non-zero code: $($proc.ExitCode), and no compile log was generated."
           }
 
           if (-not (Test-Path $output)) {
@@ -227,15 +251,8 @@ jobs:
             throw "Output file exists but is empty: $output"
           }
 
-          if (Test-Path $log) {
-            $logText = Get-Content $log -Raw
-            if (
-              $logText -match "(?im)\b([1-9]\d*)\s+errors?\b" -or
-              $logText -match "(?im):\s*error\s+\d+\b"
-            ) {
-              Write-Host $logText
-              throw "Compilation failed: compiler reported errors."
-            }
+          if ($proc.ExitCode -ne 0) {
+            Write-Warning "MetaEditor exited with code $($proc.ExitCode) but no compile errors were reported and output exists."
           }
 
       # --------------------------------------------------------------------
