@@ -242,6 +242,11 @@ jobs:
             throw "MetaEditor exited with non-zero code: $($proc.ExitCode), and no compile log was generated."
           }
 
+          Write-Host "Searching for generated ex5..."
+          Get-ChildItem -Path "$env:LOCALAPPDATA\MetaQuotes" -Filter "MtApi5.ex5" -Recurse -ErrorAction SilentlyContinue |
+            Select-Object FullName, LastWriteTime
+
+
           if (-not (Test-Path $output)) {
             $expectedName = [System.IO.Path]::GetFileName($output)
             $searchRoots = @(
