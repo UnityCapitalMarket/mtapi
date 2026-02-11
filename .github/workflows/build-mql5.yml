@@ -216,8 +216,7 @@ jobs:
           $compileArgs = @(
             "/compile:`"$stagedSource`"",
             "/include:`"$includeRoot`"",
-            "/log:`"$log`"",
-            "/s"
+            "/log:`"$log`""
           )
 
           if (Test-Path $output) {
