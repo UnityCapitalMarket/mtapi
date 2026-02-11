@@ -192,6 +192,14 @@ jobs:
           $log = "${env:COMPILE_LOG}"
           $metaEditor = "${{ steps.metaeditor.outputs.path }}"
 
+          $tempMqlRoot = Join-Path $env:RUNNER_TEMP "MQL5"
+          $tempExperts = Join-Path $tempMqlRoot "Experts"
+
+          New-Item -ItemType Directory -Path $tempExperts -Force | Out-Null
+
+          $stagedSource = Join-Path $tempExperts "MtApi5.mq5"
+          Copy-Item -Path $source -Destination $stagedSource -Force
+
           if (-not (Test-Path $source)) {
             throw "Source file not found: $source"
           }
@@ -206,7 +214,7 @@ jobs:
           }
 
           $compileArgs = @(
-            "/compile:`"$source`"",
+            "/compile:`"$stagedSource`"",
             "/include:`"$includeRoot`"",
             "/log:`"$log`"",
             "/s"
@@ -236,6 +244,14 @@ jobs:
           if ($hasCompilerErrors) {
             Write-Host $logText
             throw "Compilation failed: compiler reported errors."
+          }
+
+          $stagedEx5 = Join-Path $tempExperts "MtApi5.ex5"
+
+          if (Test-Path $stagedEx5) {
+            New-Item -ItemType Directory -Path (Split-Path -Path $output -Parent) -Force | Out-Null
+            Copy-Item -Path $stagedEx5 -Destination $output -Force
+            Write-Host "Copied staged output: $stagedEx5 -> $output"
           }
 
           if ($proc.ExitCode -ne 0 -and -not (Test-Path $log)) {
