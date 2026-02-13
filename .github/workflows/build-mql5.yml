@@ -19,36 +19,30 @@ jobs:
     env:
       SOURCE_FILE: mq5/MtApi5.mq5
       OUTPUT_FILE: mq5/MtApi5.ex5
-      PORTABLE_DIR: metaeditor5_portable
 
     steps:
-      # Checkout repository sources used for staging MQL5 compile inputs.
+      # --------------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Initialize all paths used by the portable MetaEditor workflow.
-      - name: Initialize portable build paths
+      # --------------------------------------------------------------------
+      - name: Initialize build environment paths
         shell: pwsh
         run: |
-          $portableRoot = Join-Path $env:GITHUB_WORKSPACE "${env:PORTABLE_DIR}"
-          $portableMql5 = Join-Path $portableRoot "MQL5"
-          $portableExperts = Join-Path $portableMql5 "Experts"
-          $portableInclude = Join-Path $portableMql5 "Include"
+          $installDir = Join-Path $env:RUNNER_TEMP "MetaTrader5"
           $installerPath = Join-Path $env:RUNNER_TEMP "mt5setup.exe"
           $compileLog = Join-Path $env:RUNNER_TEMP "metaeditor-compile.log"
 
-          "PORTABLE_ROOT=$portableRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "PORTABLE_MQL5_DIR=$portableMql5" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "PORTABLE_EXPERTS_DIR=$portableExperts" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "PORTABLE_INCLUDE_DIR=$portableInclude" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MT5_INSTALL_DIR=$installDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "MT5_INSTALLER_PATH=$installerPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "COMPILE_LOG=$compileLog" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      # Download the MetaTrader 5 installer, then use it only in /portable mode.
+      # --------------------------------------------------------------------
       - name: Download MetaTrader 5 installer
         shell: pwsh
         run: |
           $ProgressPreference = "SilentlyContinue"
+
           $urls = @(
             "https://download.terminal.free/cdn/web/metaquotes.ltd/mt5/mt5setup.exe",
             "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe"
@@ -72,100 +66,165 @@ jobs:
             throw "Failed to download MetaTrader 5 installer from all known URLs."
           }
 
-      # Install MetaEditor into a workspace-local portable folder (no system dependency).
-      - name: Install MetaEditor 5 in portable mode
+      # --------------------------------------------------------------------
+      - name: Install MetaTrader 5 silently
         shell: pwsh
         run: |
           if (-not (Test-Path "${env:MT5_INSTALLER_PATH}")) {
             throw "Installer not found: ${env:MT5_INSTALLER_PATH}"
           }
 
-          Remove-Item -Path "${env:PORTABLE_ROOT}" -Recurse -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Path "${env:PORTABLE_ROOT}" -Force | Out-Null
+          $installerInfo = Get-Item "${env:MT5_INSTALLER_PATH}"
+          Write-Host "Installer: $($installerInfo.FullName)"
+          Write-Host "Installer size: $($installerInfo.Length) bytes"
 
-          $installArgs = @(
-            "/auto",
-            "/portable",
-            "/path:`"${env:PORTABLE_ROOT}`""
+          New-Item -ItemType Directory -Path "${env:MT5_INSTALL_DIR}" -Force | Out-Null
+
+          $attempts = @(
+            @("/auto", "/path:`"${env:MT5_INSTALL_DIR}`""),
+            @("/auto", "/portable", "/path:`"${env:MT5_INSTALL_DIR}`"")
           )
 
-          $proc = Start-Process -FilePath "${env:MT5_INSTALLER_PATH}" -ArgumentList $installArgs -Wait -PassThru
-          Write-Host "Portable installer exit code: $($proc.ExitCode)"
+          $metaEditor = $null
+          $exitCodes = @()
 
-          $metaEditor = @(
-            (Join-Path "${env:PORTABLE_ROOT}" "metaeditor64.exe"),
-            (Join-Path "${env:PORTABLE_ROOT}" "MetaEditor64.exe"),
-            (Join-Path "${env:PORTABLE_ROOT}" "metaeditor.exe")
-          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          foreach ($attempt in $attempts) {
+            Write-Host "Running installer with args: $($attempt -join ' ')"
+            $proc = Start-Process -FilePath "${env:MT5_INSTALLER_PATH}" -ArgumentList $attempt -Wait -PassThru
+            $exitCodes += $proc.ExitCode
+            Write-Host "Installer exited with code: $($proc.ExitCode)"
+
+            $candidatePaths = @(
+              (Join-Path "${env:MT5_INSTALL_DIR}" "metaeditor64.exe"),
+              (Join-Path "${env:MT5_INSTALL_DIR}" "MetaEditor64.exe")
+            )
+            $metaEditor = $candidatePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+            if ($metaEditor) {
+              break
+            }
+          }
 
           if (-not $metaEditor) {
-            $metaEditor = Get-ChildItem -Path "${env:PORTABLE_ROOT}" -Recurse -File -ErrorAction SilentlyContinue |
-              Where-Object { $_.Name -in @("metaeditor64.exe", "MetaEditor64.exe", "metaeditor.exe") } |
+            Write-Warning "MetaTrader installation did not produce metaeditor64.exe under ${env:MT5_INSTALL_DIR}."
+            $dir = "${env:MT5_INSTALL_DIR}"
+            if (Test-Path $dir) {
+              Write-Host "Install dir content snapshot:"
+              Get-ChildItem -Path $dir -Recurse -ErrorAction SilentlyContinue |
+                Select-Object -First 50 -ExpandProperty FullName |
+                ForEach-Object { Write-Host $_ }
+            }
+            throw "MetaTrader 5 installation failed. Exit codes: $($exitCodes -join ', ')"
+          }
+
+      # --------------------------------------------------------------------
+      - name: Resolve metaeditor64.exe path
+        id: metaeditor
+        shell: pwsh
+        run: |
+          $preferred = Join-Path "${env:MT5_INSTALL_DIR}" "metaeditor64.exe"
+          if (Test-Path $preferred) {
+            $metaEditor = $preferred
+          } else {
+            $roots = @(
+              "${env:MT5_INSTALL_DIR}",
+              "C:\Program Files",
+              "C:\Program Files (x86)",
+              "$env:APPDATA\MetaQuotes\Terminal",
+              "$env:LOCALAPPDATA\MetaQuotes\Terminal",
+              "$env:LOCALAPPDATA\Programs"
+            )
+            $metaEditor = Get-ChildItem -Path $roots -Filter "metaeditor64.exe" -File -Recurse -ErrorAction SilentlyContinue |
               Select-Object -First 1 -ExpandProperty FullName
           }
 
           if (-not $metaEditor) {
-            throw "Portable MetaEditor executable was not found under ${env:PORTABLE_ROOT}."
+            throw "metaeditor64.exe not found after installation."
           }
 
-          $portableMetaEditorExe = Join-Path "${env:PORTABLE_ROOT}" "metaeditor.exe"
-          if ($metaEditor -ne $portableMetaEditorExe) {
-            Copy-Item -Path $metaEditor -Destination $portableMetaEditorExe -Force
-            $metaEditor = $portableMetaEditorExe
-          }
+          "path=$metaEditor" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Using MetaEditor: $metaEditor"
 
-          "METAEDITOR_EXE=$metaEditor" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Using portable MetaEditor executable: $metaEditor"
-
-      # Copy only required project sources into the portable MQL5 tree.
-      - name: Stage mq5 sources into portable MQL5 folder
+      # --------------------------------------------------------------------
+      - name: Stage vendored include tree
+        id: stage_includes
         shell: pwsh
         run: |
-          $repoSource = Join-Path $env:GITHUB_WORKSPACE "${env:SOURCE_FILE}"
-          $repoInclude = Join-Path $env:GITHUB_WORKSPACE "mq5\Include"
+          $repoMq5 = Join-Path $env:GITHUB_WORKSPACE "mq5"
+          $vendorInclude = Join-Path $repoMq5 "Include"
+          $stageRoot = Join-Path $env:RUNNER_TEMP "mql5-stage"
+          $stageInclude = Join-Path $stageRoot "Include"
 
-          if (-not (Test-Path $repoSource)) {
-            throw "Source file not found: $repoSource"
+          if (-not (Test-Path $vendorInclude)) {
+            throw "Vendored include directory is missing: $vendorInclude"
           }
-          if (-not (Test-Path $repoInclude)) {
-            throw "Include directory not found: $repoInclude"
+
+          Remove-Item -Path $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $stageInclude -Force | Out-Null
+          Copy-Item -Path (Join-Path $vendorInclude "*") -Destination $stageInclude -Recurse -Force
+
+          $requiredHeaders = @(
+            "json.mqh",
+            "hash.mqh",
+            "CHistoryPositionInfo.mqh",
+            "Trade\SymbolInfo.mqh",
+            "Trade\OrderInfo.mqh",
+            "Trade\Trade.mqh",
+            "generic\hashmap.mqh"
+          )
+
+          foreach ($header in $requiredHeaders) {
+            $headerPath = Join-Path $stageInclude $header
+            if (-not (Test-Path $headerPath)) {
+              throw "Missing vendored header in mq5/Include: $header"
+            }
           }
 
-          New-Item -ItemType Directory -Path "${env:PORTABLE_EXPERTS_DIR}" -Force | Out-Null
-          New-Item -ItemType Directory -Path "${env:PORTABLE_INCLUDE_DIR}" -Force | Out-Null
+          "root=$stageRoot" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Using staged include root: $stageRoot"
 
-          Remove-Item -Path (Join-Path "${env:PORTABLE_EXPERTS_DIR}" "MtApi5.mq5") -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path (Join-Path "${env:PORTABLE_EXPERTS_DIR}" "MtApi5.ex5") -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path (Join-Path "${env:PORTABLE_INCLUDE_DIR}" "*") -Recurse -Force -ErrorAction SilentlyContinue
-
-          Copy-Item -Path $repoSource -Destination (Join-Path "${env:PORTABLE_EXPERTS_DIR}" "MtApi5.mq5") -Force
-          Copy-Item -Path (Join-Path $repoInclude "*") -Destination "${env:PORTABLE_INCLUDE_DIR}" -Recurse -Force
-
-      # Compile from the portable MetaEditor binary and publish output back to the repo path.
-      - name: Compile mq5/MtApi5.mq5 with portable MetaEditor
+      # --------------------------------------------------------------------
+      - name: Compile mq5/MtApi5.mq5 to MtApi5.ex5
         shell: pwsh
         run: |
-          $metaEditor = "${env:METAEDITOR_EXE}"
-          $source = Join-Path "${env:PORTABLE_EXPERTS_DIR}" "MtApi5.mq5"
-          $stagedEx5 = Join-Path "${env:PORTABLE_EXPERTS_DIR}" "MtApi5.ex5"
-          $repoOutput = Join-Path $env:GITHUB_WORKSPACE "${env:OUTPUT_FILE}"
+          $source = Join-Path $env:GITHUB_WORKSPACE "${env:SOURCE_FILE}"
+          $output = Join-Path $env:GITHUB_WORKSPACE "${env:OUTPUT_FILE}"
+          $includeRoot = "${{ steps.stage_includes.outputs.root }}"
           $log = "${env:COMPILE_LOG}"
+          $metaEditor = "${{ steps.metaeditor.outputs.path }}"
 
-          if (-not (Test-Path $metaEditor)) {
-            throw "Portable MetaEditor not found: $metaEditor"
-          }
+          $tempMqlRoot = Join-Path $env:RUNNER_TEMP "MQL5"
+          $tempExperts = Join-Path $tempMqlRoot "Experts"
+
+          New-Item -ItemType Directory -Path $tempExperts -Force | Out-Null
+
+          $stagedSource = Join-Path $tempExperts "MtApi5.mq5"
+          Copy-Item -Path $source -Destination $stagedSource -Force
+
           if (-not (Test-Path $source)) {
-            throw "Staged source file not found: $source"
+            throw "Source file not found: $source"
           }
-
-          Remove-Item -Path $repoOutput -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path $stagedEx5 -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path $log -Force -ErrorAction SilentlyContinue
+          if (-not (Test-Path $metaEditor)) {
+            throw "MetaEditor not found: $metaEditor"
+          }
+          if (-not $includeRoot) {
+            throw "Staged include root output is empty."
+          }
+          if (-not (Test-Path $includeRoot)) {
+            throw "Staged include root not found: $includeRoot"
+          }
 
           $compileArgs = @(
-            "/compile:`"$source`"",
+            "/compile:`"$stagedSource`"",
+            "/include:`"$includeRoot`"",
             "/log:`"$log`""
           )
+
+          if (Test-Path $output) {
+            Remove-Item -Path $output -Force
+          }
+          if (Test-Path $log) {
+            Remove-Item -Path $log -Force
+          }
 
           $proc = Start-Process -FilePath $metaEditor -ArgumentList $compileArgs -Wait -PassThru
 
@@ -186,27 +245,32 @@ jobs:
             throw "Compilation failed: compiler reported errors."
           }
 
+          $stagedEx5 = Join-Path $tempExperts "MtApi5.ex5"
+
+          if (Test-Path $stagedEx5) {
+            New-Item -ItemType Directory -Path (Split-Path -Path $output -Parent) -Force | Out-Null
+            Copy-Item -Path $stagedEx5 -Destination $output -Force
+            Write-Host "Copied staged output: $stagedEx5 -> $output"
+          }
+
           if ($proc.ExitCode -ne 0 -and -not (Test-Path $log)) {
             throw "MetaEditor exited with non-zero code: $($proc.ExitCode), and no compile log was generated."
           }
 
-          if (-not (Test-Path $stagedEx5)) {
+          if (-not (Test-Path $output)) {
             if (Test-Path $log) { Get-Content $log | Write-Host }
-            throw "Expected compiled output was not generated: $stagedEx5"
+            throw "Expected output file not found: $output"
           }
 
-          New-Item -ItemType Directory -Path (Split-Path -Path $repoOutput -Parent) -Force | Out-Null
-          Copy-Item -Path $stagedEx5 -Destination $repoOutput -Force
-
-          if ((Get-Item $repoOutput).Length -le 0) {
-            throw "Compiled output exists but is empty: $repoOutput"
+          if ((Get-Item $output).Length -le 0) {
+            throw "Output file exists but is empty: $output"
           }
 
           if ($proc.ExitCode -ne 0) {
-            Write-Warning "MetaEditor exited with code $($proc.ExitCode) but output exists and no compile errors were reported."
+            Write-Warning "MetaEditor exited with code $($proc.ExitCode) but no compile errors were reported and output exists."
           }
 
-      # Keep existing EX5 artifact upload for downstream jobs/releases.
+      # --------------------------------------------------------------------
       - name: Upload MtApi5.ex5 artifact
         uses: actions/upload-artifact@v4
         with:
@@ -214,7 +278,7 @@ jobs:
           path: mq5/MtApi5.ex5
           if-no-files-found: error
 
-      # Keep existing compile log artifact upload for debugging failed builds.
+      # --------------------------------------------------------------------
       - name: Upload compile log (always)
         if: always()
         uses: actions/upload-artifact@v4
