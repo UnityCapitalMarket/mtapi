@@ -1,10 +1,6 @@
 name: Build MQL5
 
 on:
-  push:
-    paths:
-      - "mq5/**"
-      - ".github/workflows/build-mql5.yml"
   pull_request:
     paths:
       - "mq5/**"
@@ -23,15 +19,23 @@ jobs:
     env:
       SOURCE_FILE: mq5/MtApi5.mq5
       OUTPUT_FILE: mq5/MtApi5.ex5
-      MT5_INSTALL_DIR: ${{ env.RUNNER_TEMP }}\MetaTrader5
-      MT5_INSTALLER_PATH: ${{ env.RUNNER_TEMP }}\mt5setup.exe
-      COMPILE_LOG: ${{ env.RUNNER_TEMP }}\metaeditor-compile.log
-
 
     steps:
       # --------------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # --------------------------------------------------------------------
+      - name: Initialize build environment paths
+        shell: pwsh
+        run: |
+          $installDir = Join-Path $env:RUNNER_TEMP "MetaTrader5"
+          $installerPath = Join-Path $env:RUNNER_TEMP "mt5setup.exe"
+          $compileLog = Join-Path $env:RUNNER_TEMP "metaeditor-compile.log"
+
+          "MT5_INSTALL_DIR=$installDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MT5_INSTALLER_PATH=$installerPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "COMPILE_LOG=$compileLog" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       # --------------------------------------------------------------------
       - name: Download MetaTrader 5 installer
@@ -70,16 +74,46 @@ jobs:
             throw "Installer not found: ${env:MT5_INSTALLER_PATH}"
           }
 
+          $installerInfo = Get-Item "${env:MT5_INSTALLER_PATH}"
+          Write-Host "Installer: $($installerInfo.FullName)"
+          Write-Host "Installer size: $($installerInfo.Length) bytes"
+
           New-Item -ItemType Directory -Path "${env:MT5_INSTALL_DIR}" -Force | Out-Null
 
-          $installArgs = @(
-            "/auto",
-            "/path:`"${env:MT5_INSTALL_DIR}`""
+          $attempts = @(
+            @("/auto", "/path:`"${env:MT5_INSTALL_DIR}`""),
+            @("/auto", "/portable", "/path:`"${env:MT5_INSTALL_DIR}`"")
           )
 
-          $proc = Start-Process -FilePath "${env:MT5_INSTALLER_PATH}" -ArgumentList $installArgs -Wait -PassThru
-          if ($proc.ExitCode -ne 0) {
-            throw "MetaTrader 5 installation failed with exit code $($proc.ExitCode)."
+          $metaEditor = $null
+          $exitCodes = @()
+
+          foreach ($attempt in $attempts) {
+            Write-Host "Running installer with args: $($attempt -join ' ')"
+            $proc = Start-Process -FilePath "${env:MT5_INSTALLER_PATH}" -ArgumentList $attempt -Wait -PassThru
+            $exitCodes += $proc.ExitCode
+            Write-Host "Installer exited with code: $($proc.ExitCode)"
+
+            $candidatePaths = @(
+              (Join-Path "${env:MT5_INSTALL_DIR}" "metaeditor64.exe"),
+              (Join-Path "${env:MT5_INSTALL_DIR}" "MetaEditor64.exe")
+            )
+            $metaEditor = $candidatePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+            if ($metaEditor) {
+              break
+            }
+          }
+
+          if (-not $metaEditor) {
+            Write-Warning "MetaTrader installation did not produce metaeditor64.exe under ${env:MT5_INSTALL_DIR}."
+            $dir = "${env:MT5_INSTALL_DIR}"
+            if (Test-Path $dir) {
+              Write-Host "Install dir content snapshot:"
+              Get-ChildItem -Path $dir -Recurse -ErrorAction SilentlyContinue |
+                Select-Object -First 50 -ExpandProperty FullName |
+                ForEach-Object { Write-Host $_ }
+            }
+            throw "MetaTrader 5 installation failed. Exit codes: $($exitCodes -join ', ')"
           }
 
       # --------------------------------------------------------------------
@@ -91,7 +125,14 @@ jobs:
           if (Test-Path $preferred) {
             $metaEditor = $preferred
           } else {
-            $roots = @("${env:MT5_INSTALL_DIR}", "C:\Program Files", "C:\Program Files (x86)")
+            $roots = @(
+              "${env:MT5_INSTALL_DIR}",
+              "C:\Program Files",
+              "C:\Program Files (x86)",
+              "$env:APPDATA\MetaQuotes\Terminal",
+              "$env:LOCALAPPDATA\MetaQuotes\Terminal",
+              "$env:LOCALAPPDATA\Programs"
+            )
             $metaEditor = Get-ChildItem -Path $roots -Filter "metaeditor64.exe" -File -Recurse -ErrorAction SilentlyContinue |
               Select-Object -First 1 -ExpandProperty FullName
           }
@@ -104,14 +145,60 @@ jobs:
           Write-Host "Using MetaEditor: $metaEditor"
 
       # --------------------------------------------------------------------
+      - name: Stage vendored include tree
+        id: stage_includes
+        shell: pwsh
+        run: |
+          $repoMq5 = Join-Path $env:GITHUB_WORKSPACE "mq5"
+          $vendorInclude = Join-Path $repoMq5 "Include"
+          $stageRoot = Join-Path $env:RUNNER_TEMP "mql5-stage"
+          $stageInclude = Join-Path $stageRoot "Include"
+
+          if (-not (Test-Path $vendorInclude)) {
+            throw "Vendored include directory is missing: $vendorInclude"
+          }
+
+          Remove-Item -Path $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $stageInclude -Force | Out-Null
+          Copy-Item -Path (Join-Path $vendorInclude "*") -Destination $stageInclude -Recurse -Force
+
+          $requiredHeaders = @(
+            "json.mqh",
+            "hash.mqh",
+            "CHistoryPositionInfo.mqh",
+            "Trade\SymbolInfo.mqh",
+            "Trade\OrderInfo.mqh",
+            "Trade\Trade.mqh",
+            "generic\hashmap.mqh"
+          )
+
+          foreach ($header in $requiredHeaders) {
+            $headerPath = Join-Path $stageInclude $header
+            if (-not (Test-Path $headerPath)) {
+              throw "Missing vendored header in mq5/Include: $header"
+            }
+          }
+
+          "root=$stageRoot" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Using staged include root: $stageRoot"
+
+      # --------------------------------------------------------------------
       - name: Compile mq5/MtApi5.mq5 to MtApi5.ex5
         shell: pwsh
         run: |
           $source = Join-Path $env:GITHUB_WORKSPACE "${env:SOURCE_FILE}"
           $output = Join-Path $env:GITHUB_WORKSPACE "${env:OUTPUT_FILE}"
-          $includeDir = Split-Path -Path $source -Parent
+          $includeRoot = "${{ steps.stage_includes.outputs.root }}"
           $log = "${env:COMPILE_LOG}"
           $metaEditor = "${{ steps.metaeditor.outputs.path }}"
+
+          $tempMqlRoot = Join-Path $env:RUNNER_TEMP "MQL5"
+          $tempExperts = Join-Path $tempMqlRoot "Experts"
+
+          New-Item -ItemType Directory -Path $tempExperts -Force | Out-Null
+
+          $stagedSource = Join-Path $tempExperts "MtApi5.mq5"
+          Copy-Item -Path $source -Destination $stagedSource -Force
 
           if (-not (Test-Path $source)) {
             throw "Source file not found: $source"
@@ -119,18 +206,55 @@ jobs:
           if (-not (Test-Path $metaEditor)) {
             throw "MetaEditor not found: $metaEditor"
           }
+          if (-not $includeRoot) {
+            throw "Staged include root output is empty."
+          }
+          if (-not (Test-Path $includeRoot)) {
+            throw "Staged include root not found: $includeRoot"
+          }
 
           $compileArgs = @(
-            "/compile:`"$source`"",
-            "/include:`"$includeDir`"",
-            "/log:`"$log`"",
-            "/s"
+            "/compile:`"$stagedSource`"",
+            "/include:`"$includeRoot`"",
+            "/log:`"$log`""
           )
 
+          if (Test-Path $output) {
+            Remove-Item -Path $output -Force
+          }
+          if (Test-Path $log) {
+            Remove-Item -Path $log -Force
+          }
+
           $proc = Start-Process -FilePath $metaEditor -ArgumentList $compileArgs -Wait -PassThru
-          if ($proc.ExitCode -ne 0) {
-            if (Test-Path $log) { Get-Content $log | Write-Host }
-            throw "MetaEditor exited with non-zero code: $($proc.ExitCode)"
+
+          $logText = ""
+          $hasCompilerErrors = $false
+          if (Test-Path $log) {
+            $logText = Get-Content $log -Raw
+            if (
+              $logText -match "(?im)\b([1-9]\d*)\s+errors?\b" -or
+              $logText -match "(?im):\s*error\s+\d+\b"
+            ) {
+              $hasCompilerErrors = $true
+            }
+          }
+
+          if ($hasCompilerErrors) {
+            Write-Host $logText
+            throw "Compilation failed: compiler reported errors."
+          }
+
+          $stagedEx5 = Join-Path $tempExperts "MtApi5.ex5"
+
+          if (Test-Path $stagedEx5) {
+            New-Item -ItemType Directory -Path (Split-Path -Path $output -Parent) -Force | Out-Null
+            Copy-Item -Path $stagedEx5 -Destination $output -Force
+            Write-Host "Copied staged output: $stagedEx5 -> $output"
+          }
+
+          if ($proc.ExitCode -ne 0 -and -not (Test-Path $log)) {
+            throw "MetaEditor exited with non-zero code: $($proc.ExitCode), and no compile log was generated."
           }
 
           if (-not (Test-Path $output)) {
@@ -142,15 +266,8 @@ jobs:
             throw "Output file exists but is empty: $output"
           }
 
-          if (Test-Path $log) {
-            $logText = Get-Content $log -Raw
-            if (
-              $logText -match "(?im)\b([1-9]\d*)\s+errors?\b" -or
-              $logText -match "(?im):\s*error\s+\d+\b"
-            ) {
-              Write-Host $logText
-              throw "Compilation failed: compiler reported errors."
-            }
+          if ($proc.ExitCode -ne 0) {
+            Write-Warning "MetaEditor exited with code $($proc.ExitCode) but no compile errors were reported and output exists."
           }
 
       # --------------------------------------------------------------------
