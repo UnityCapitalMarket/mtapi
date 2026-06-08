@@ -2,6 +2,7 @@
 using MtApi5.MtProtocol.ICustomRequest;
 using MtClient;
 using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 
 namespace MtApi5
@@ -500,22 +501,12 @@ namespace MtApi5
             return SendCommand<List<MT5Order>>(ExecutorHandle, Mt5CommandType.GetpendingOrder);
         }
 
-        public List<MT5Deal>? GetDealHistoriesByPosID(ulong ticketNumber)
+        public List<MT5Deal>? GetDealHistories(DateTime fromDate, DateTime toDate)
         {
-            Dictionary<string, object> cmdParams = new() { { "TicketNumber", ticketNumber } };
+            Dictionary<string, object> cmdParams = new() { { "FromDate", Mt5TimeConverter.ConvertToMtTime(fromDate) },
+                { "ToDate", Mt5TimeConverter.ConvertToMtTime(toDate) } };
             return SendCommand<List<MT5Deal>>(ExecutorHandle, Mt5CommandType.GetDealHistories, cmdParams);
         }
-
-
-        public bool IsLoginFailed(ulong login, out string failureLog)
-        {
-            Dictionary<string, object> cmdParams = new() { { "login", login } };
-
-            var response = SendCommand<FuncResult<string>>(ExecutorHandle, Mt5CommandType.IsLoginFailed, cmdParams);
-            failureLog = response?.Result ?? "";
-            return response != null && response.RetVal;
-        }
-
 
         public List<MT5SymbolInfo> GetSymbolsInfo(int limit =100, int start =0)
         {
@@ -523,7 +514,6 @@ namespace MtApi5
                 { "Start",start } };
             return SendCommand<List<MT5SymbolInfo>>(ExecutorHandle, Mt5CommandType.SymbolsInfo, cmdParams);
         }
-
 
         public List<string> GetSymbolsName(int limit = 100, int start = 0)
         {

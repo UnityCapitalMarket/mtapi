@@ -393,13 +393,13 @@ int preinit()
    ADD_EXECUTOR(313, PositionCloseBy);
    ADD_EXECUTOR(314, CloseByMagic);
    
+   
    ADD_EXECUTOR(401, HistoryPosition);
    ADD_EXECUTOR(402, GetPositions);
    ADD_EXECUTOR(403, SymbolsInfo);
    ADD_EXECUTOR(404, GetpendingOrder);
    ADD_EXECUTOR(405, GetSymbolsName);
    ADD_EXECUTOR(406, GetDealHistories);
-   ADD_EXECUTOR(407, IsLoginFailed);   
    return (0);
 }
 
@@ -1332,12 +1332,6 @@ string Execute_SymbolsInfo()
    return ExportSymbolsToJson(limit,start);
 }
 
-string Execute_GetDealHistories()
-{
-   GET_JSON_PAYLOAD(jo);
-   GET_ULONG_JSON_VALUE(jo, "TicketNumber", ticket_number);
-   return ExportHistoryDealsToJson(ticket_number);
-}
 
 string Execute_GetPositions()
 {
@@ -1855,6 +1849,69 @@ string Execute_CopyTime()
       jaresult.put(i, new JSONNumber((long)time_array[i]));
       
    return CreateSuccessResponse(jaresult);
+}
+
+// Helper: convert all deal properties to JSONObject
+JSONObject* MqlDealToJson(ulong ticket)
+{
+   JSONObject *jo = new JSONObject();
+   
+   // Integer properties
+   jo.put("Ticket",        new JSONNumber(ticket));
+   jo.put("Order",         new JSONNumber(HistoryDealGetInteger(ticket, DEAL_ORDER)));
+   jo.put("Time",          new JSONNumber(HistoryDealGetInteger(ticket, DEAL_TIME)));
+   jo.put("TimeMsc",       new JSONNumber(HistoryDealGetInteger(ticket, DEAL_TIME_MSC)));
+   jo.put("Type",          new JSONNumber((int)HistoryDealGetInteger(ticket, DEAL_TYPE)));
+   jo.put("Entry",         new JSONNumber((int)HistoryDealGetInteger(ticket, DEAL_ENTRY)));
+   jo.put("Magic",         new JSONNumber(HistoryDealGetInteger(ticket, DEAL_MAGIC)));
+   jo.put("Reason",        new JSONNumber((int)HistoryDealGetInteger(ticket, DEAL_REASON)));
+   jo.put("PositionId",    new JSONNumber(HistoryDealGetInteger(ticket, DEAL_POSITION_ID)));
+   
+   // Double properties
+   jo.put("Volume",        new JSONNumber(HistoryDealGetDouble(ticket, DEAL_VOLUME)));
+   jo.put("Price",         new JSONNumber(HistoryDealGetDouble(ticket, DEAL_PRICE)));
+   jo.put("Commission",    new JSONNumber(HistoryDealGetDouble(ticket, DEAL_COMMISSION)));
+   jo.put("Swap",          new JSONNumber(HistoryDealGetDouble(ticket, DEAL_SWAP)));
+   jo.put("Profit",        new JSONNumber(HistoryDealGetDouble(ticket, DEAL_PROFIT)));
+   jo.put("Fee",           new JSONNumber(HistoryDealGetDouble(ticket, DEAL_FEE)));
+   jo.put("Sl",            new JSONNumber(HistoryDealGetDouble(ticket, DEAL_SL)));
+   jo.put("Tp",            new JSONNumber(HistoryDealGetDouble(ticket, DEAL_TP)));
+   
+   // String properties
+   jo.put("Symbol",        new JSONString(HistoryDealGetString(ticket, DEAL_SYMBOL)));
+   jo.put("Comment",       new JSONString(HistoryDealGetString(ticket, DEAL_COMMENT)));
+   jo.put("ExternalId",    new JSONString(HistoryDealGetString(ticket, DEAL_EXTERNAL_ID)));
+   
+   return jo;
+}
+
+// Executor: get all deals in selected history as JSON array
+// Payload: { "FromDate": int, "ToDate": int }
+string Execute_GetDealHistories()
+{
+   GET_JSON_PAYLOAD(jo);
+   GET_INT_JSON_VALUE(jo, "FromDate", from_date);
+   GET_INT_JSON_VALUE(jo, "ToDate",   to_date);
+   
+   if(!::HistorySelect(from_date, to_date))
+   {
+      Print(__FUNCTION__, " > HistorySelect failed: ", GetLastError());
+      return false;
+   }
+
+   int total = HistoryDealsTotal();
+   JSONArray* jaDeals = new JSONArray();
+
+   for (int i = 0; i < total; i++)
+   {
+      ulong ticket = HistoryDealGetTicket(i);
+      if (ticket == 0)
+         continue;
+
+      jaDeals.put(i, MqlDealToJson(ticket));
+   }
+
+   return CreateSuccessResponse(jaDeals);
 }
 
 string Execute_CopyTime1()
@@ -2862,21 +2919,7 @@ string Execute_iAO()
 }
 
 
-string Execute_IsLoginFailed()
-{
-   GET_JSON_PAYLOAD(jo);
-   GET_LONG_JSON_VALUE(jo, "login", login);
 
-   string failureLog;
-  
-   bool ok = CheckLoginFailed(login,failureLog);
-
-   JSONObject* result_value_jo = new JSONObject();
-   result_value_jo.put("RetVal", new JSONBool(ok));
-   result_value_jo.put("Result" , new JSONString(failureLog));
-
-   return CreateSuccessResponse(result_value_jo);
-}
 
 
 string Execute_iATR()
@@ -5348,74 +5391,6 @@ JSONObject* MqlRatesToJson(const MqlRates& rates)
    jo.put("real_volume", new JSONNumber(rates.real_volume));
    return jo;
 }
-
-//+------------------------------------------------------------------+
-//| Scans the log until a definitive login result is found           |
-//| Returns true if FAILED, false if SUCCESS or not found            |
-//+------------------------------------------------------------------+
-bool CheckLoginFailed(long login, string &failureLine)
-{
-    string fileName = "", latestFile = "";
-    string searchMask = "TerminalLogs\\*.log";
-    failureLine = "";
-    // 1. Find the latest log file (MT5 format: YYYYMMDD.log)
-    long searchHandle = FileFindFirst(searchMask, fileName);
-    if(searchHandle == INVALID_HANDLE) return false;
-    latestFile = fileName;
-    FileFindClose(searchHandle);
-
-    if(latestFile == "") return false;
-
-    // 2. Open with Share Read and Unicode (Best for Wine/Ubuntu)
-    int handle = FileOpen("TerminalLogs\\" + latestFile, 
-                          FILE_READ|FILE_TXT|FILE_SHARE_READ|FILE_UNICODE);
-    
-    if(handle == INVALID_HANDLE) return false;
-
-    string targetID = "'" + (string)login + "'";
-    bool resultFound = false;
-    bool isError = false;
-    
-    printf(latestFile);
-
-    // 3. Scan line by line through the whole file
-    while(!FileIsEnding(handle))
-    {
-        string line = FileReadString(handle);
-
-
-        // Filter: Must be a Network source and match our Account ID
-        if(StringFind(line, "Network") >= 0 && StringFind(line, targetID) >= 0)
-        {
-            // Check for Failure signatures
-            if(StringFind(line, "failed") >= 0 || StringFind(line, "Invalid account") >= 0)
-            {
-                failureLine = line;
-                Print("Found definitive Login Failure: ", line);
-                isError = true;
-                resultFound = true; 
-                break; // Result found, exit loop
-            }
-            
-            // Check for Success signatures
-            if(StringFind(line, "authorized") >= 0)
-            {
-                Print("Found definitive Login Success: ", line);
-              
-                isError = false;
-                resultFound = true;
-                break; // Result found, exit loop
-            }
-        }
-    }
-
-    FileClose(handle);
-    
-    // If we finished the file without finding a definitive success/fail, 
-    // it treats it as false (no failure detected yet).
-    return isError;
-}
-
 
 
 //--- core: close partial theo ticket, không dùng CTrade
