@@ -1289,6 +1289,14 @@ int ExecuteCommand()
       response = Execute_FlushJournalLog();
    break;
 
+   case 293: // AccountInfo (aggregated account information in a single request)
+      response = Execute_AccountInfo();
+   break;
+
+   case 294: // SymbolInfo (aggregated symbol information in a single request)
+      response = Execute_SymbolInfo();
+   break;
+
    default:
       Print("WARNING: Unknown command type = ", command_type);
       response = CreateErrorResponse(-1, "Unknown command type");
@@ -4168,6 +4176,98 @@ string Execute_FlushJournalLog()
 #endif
 
    return CreateSuccessResponse(result);
+}
+
+//+------------------------------------------------------------------+
+//| Aggregated account information.                                  |
+//| Returns every commonly used account value in a single response   |
+//| so the client does not need to issue one request per field.      |
+//| This removes the round-trip storm that previously caused command |
+//| queue back-pressure and "Response from MetaTrader is null"       |
+//| timeouts when many account values were requested concurrently.   |
+//+------------------------------------------------------------------+
+string Execute_AccountInfo()
+{
+   double margin     = AccountMargin();
+   double equity     = AccountEquity();
+
+   // ACCOUNT_MARGIN_LEVEL is reported by the terminal as equity/margin*100.
+   // Fall back to a manual computation if the terminal returns 0.
+   double marginLevel = AccountInfoDouble(ACCOUNT_MARGIN_LEVEL);
+   if (marginLevel == 0.0 && margin > 0.0)
+      marginLevel = equity / margin * 100.0;
+
+   JSONObject *jo = new JSONObject();
+   jo.put("Login",        new JSONNumber((long)AccountNumber()));
+   jo.put("Name",         new JSONString(AccountName()));
+   jo.put("Server",       new JSONString(AccountServer()));
+   jo.put("Company",      new JSONString(AccountCompany()));
+   jo.put("Currency",     new JSONString(AccountCurrency()));
+   jo.put("Balance",      new JSONNumber(AccountBalance()));
+   jo.put("Credit",       new JSONNumber(AccountCredit()));
+   jo.put("Equity",       new JSONNumber(equity));
+   jo.put("Profit",       new JSONNumber(AccountProfit()));
+   jo.put("Margin",       new JSONNumber(margin));
+   jo.put("FreeMargin",   new JSONNumber(AccountFreeMargin()));
+   jo.put("MarginLevel",  new JSONNumber(marginLevel));
+   jo.put("Leverage",     new JSONNumber((long)AccountLeverage()));
+   jo.put("StopoutLevel", new JSONNumber((long)AccountStopoutLevel()));
+   jo.put("StopoutMode",  new JSONNumber((long)AccountStopoutMode()));
+   jo.put("IsDemo",       new JSONBool(IsDemo()));
+   jo.put("TradeAllowed", new JSONBool(IsTradeAllowed()));
+
+   return CreateSuccessResponse(jo);
+}
+
+//+------------------------------------------------------------------+
+//| Aggregated symbol information for a single instrument.           |
+//| Returns the commonly used symbol values (prices, contract specs, |
+//| margins, swaps, etc.) in one response so the client does not     |
+//| need a separate request per field. Same rationale as            |
+//| Execute_AccountInfo: one round-trip avoids the queue back-       |
+//| pressure that caused "Response from MetaTrader is null" timeouts |
+//| under concurrent per-field requests.                            |
+//+------------------------------------------------------------------+
+string Execute_SymbolInfo()
+{
+   GET_JSON_PAYLOAD(jo);
+   GET_STRING_JSON_VALUE(jo, "Symbol", symbol);
+
+   // SymbolInfoTick validates the symbol exists and yields current quotes.
+   MqlTick tick;
+   if (!SymbolInfoTick(symbol, tick))
+   {
+      return CreateErrorResponse(GetLastError(), "SymbolInfo failed: unknown symbol or no quotes");
+   }
+
+   JSONObject *res = new JSONObject();
+   res.put("Name",           new JSONString(symbol));
+   res.put("Description",    new JSONString(SymbolInfoString(symbol, SYMBOL_DESCRIPTION)));
+   res.put("CurrencyBase",   new JSONString(SymbolInfoString(symbol, SYMBOL_CURRENCY_BASE)));
+   res.put("CurrencyProfit", new JSONString(SymbolInfoString(symbol, SYMBOL_CURRENCY_PROFIT)));
+   res.put("CurrencyMargin", new JSONString(SymbolInfoString(symbol, SYMBOL_CURRENCY_MARGIN)));
+   res.put("Bid",            new JSONNumber(tick.bid));
+   res.put("Ask",            new JSONNumber(tick.ask));
+   res.put("Last",           new JSONNumber(tick.last));
+   res.put("Volume",         new JSONNumber((long)tick.volume));
+   res.put("MtTime",         new JSONNumber((long)tick.time));
+   res.put("Spread",         new JSONNumber((long)MarketInfo(symbol, MODE_SPREAD)));
+   res.put("Digits",         new JSONNumber((long)MarketInfo(symbol, MODE_DIGITS)));
+   res.put("Point",          new JSONNumber(MarketInfo(symbol, MODE_POINT)));
+   res.put("StopLevel",      new JSONNumber((long)MarketInfo(symbol, MODE_STOPLEVEL)));
+   res.put("FreezeLevel",    new JSONNumber((long)MarketInfo(symbol, MODE_FREEZELEVEL)));
+   res.put("LotSize",        new JSONNumber(MarketInfo(symbol, MODE_LOTSIZE)));
+   res.put("TickValue",      new JSONNumber(MarketInfo(symbol, MODE_TICKVALUE)));
+   res.put("TickSize",       new JSONNumber(MarketInfo(symbol, MODE_TICKSIZE)));
+   res.put("MinLot",         new JSONNumber(MarketInfo(symbol, MODE_MINLOT)));
+   res.put("MaxLot",         new JSONNumber(MarketInfo(symbol, MODE_MAXLOT)));
+   res.put("LotStep",        new JSONNumber(MarketInfo(symbol, MODE_LOTSTEP)));
+   res.put("SwapLong",       new JSONNumber(MarketInfo(symbol, MODE_SWAPLONG)));
+   res.put("SwapShort",      new JSONNumber(MarketInfo(symbol, MODE_SWAPSHORT)));
+   res.put("MarginInit",     new JSONNumber(MarketInfo(symbol, MODE_MARGININIT)));
+   res.put("MarginRequired", new JSONNumber(MarketInfo(symbol, MODE_MARGINREQUIRED)));
+
+   return CreateSuccessResponse(res);
 }
 
 // === Globals ===

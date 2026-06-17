@@ -821,6 +821,23 @@ namespace MtApi
             return SendCommand<int>(ExecutorHandle, MtCommandType.AccountStopoutMode);
         }
 
+        ///<summary>
+        ///Retrieves all commonly used account information (balance, equity, margin,
+        ///free margin, credit, profit, leverage, margin level, account number, name,
+        ///server, currency, etc.) in a single aggregated request.
+        ///</summary>
+        ///<remarks>
+        ///Prefer this method over calling the individual Account* functions when you
+        ///need several values at once. A single round-trip avoids the command queue
+        ///back-pressure that can otherwise cause "Response from MetaTrader is null"
+        ///timeouts when many requests are issued concurrently.
+        ///</remarks>
+        ///<returns>An <see cref="AccountInfoResponse"/> snapshot of the account.</returns>
+        public AccountInfoResponse? AccountInfo()
+        {
+            return SendCommand<AccountInfoResponse>(ExecutorHandle, MtCommandType.AccountInfo);
+        }
+
         public bool ChangeAccount(string login, string password, string host)
         {
             Dictionary<string, object> cmdParams = new() { { "Login", login },
@@ -1772,6 +1789,25 @@ namespace MtApi
         {
             Dictionary<string, object> cmdParams = new() { { "OnlyMarketWatch", onlyMarketWatch } };
             return SendCommand<string[]>(ExecutorHandle, MtCommandType.GetAllSymbols, cmdParams) ?? Array.Empty<string>();
+        }
+
+        ///<summary>
+        ///Retrieves all commonly used information for a single trading symbol
+        ///(prices, spread, digits, contract specs, lot limits, swaps, margins, etc.)
+        ///in a single aggregated request.
+        ///</summary>
+        ///<remarks>
+        ///Prefer this over calling SymbolInfoString/SymbolInfoInteger/SymbolInfoDouble/
+        ///SymbolInfoTick/MarketInfo individually when several values are needed. A
+        ///single round-trip avoids the command queue back-pressure that can otherwise
+        ///cause "Response from MetaTrader is null" timeouts under concurrent requests.
+        ///</remarks>
+        ///<param name="symbol">Symbol name (e.g. "EURUSD").</param>
+        ///<returns>A <see cref="SymbolInfoResponse"/> snapshot, or null if the symbol is unknown.</returns>
+        public SymbolInfoResponse? SymbolInfo(string symbol)
+        {
+            Dictionary<string, object> cmdParams = new() { { "Symbol", symbol } };
+            return SendCommand<SymbolInfoResponse>(ExecutorHandle, MtCommandType.SymbolInfo, cmdParams);
         }
 
         ///<summary>

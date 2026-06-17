@@ -290,5 +290,7 @@
         GetQuote                            = 290,
         GetAllSymbols                       = 291,
         FlushJournalLog                     = 292,
+        AccountInfo                         = 293,
+        SymbolInfo                          = 294,
     }
 }
