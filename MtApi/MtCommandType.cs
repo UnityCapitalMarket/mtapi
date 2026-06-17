@@ -288,6 +288,7 @@
         SymbolInfoDouble                    = 289,
 
         GetQuote                            = 290,
-        GetAllSymbols                       = 291
+        GetAllSymbols                       = 291,
+        FlushJournalLog                     = 292,
     }
 }

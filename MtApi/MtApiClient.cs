@@ -1717,7 +1717,7 @@ namespace MtApi
         ///</returns>
         public string? SymbolInfoString(string name, ENUM_SYMBOL_INFO_STRING propId)
         {
-            Dictionary<string, object> cmdParams = new() { { "Name", name },
+            Dictionary<string, object> cmdParams = new() { { "Symbol", name },
                 { "PropId", (int)propId } };
             return SendCommand<string>(ExecutorHandle, MtCommandType.SymbolInfoString, cmdParams);
         }
@@ -1773,6 +1773,19 @@ namespace MtApi
             Dictionary<string, object> cmdParams = new() { { "OnlyMarketWatch", onlyMarketWatch } };
             return SendCommand<string[]>(ExecutorHandle, MtCommandType.GetAllSymbols, cmdParams) ?? Array.Empty<string>();
         }
+
+        ///<summary>
+        ///Flushes the terminal's journal log by triggering the "Open Logs" menu action on the terminal window.
+        ///</summary>
+        ///<returns>
+        /// Result of the SendMessage call performed in the expert.
+        ///</returns>
+        public int FlushJournalLog()
+        {
+            return SendCommand<int>(ExecutorHandle, MtCommandType.FlushJournalLog);
+        }
+
+        
         #endregion
 
         #region Chart Operations

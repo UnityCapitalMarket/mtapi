@@ -21,6 +21,11 @@
 
 //#define __DEBUG_LOG__
 
+// Constants used by FlushJournalLog command to trigger the terminal's "Open Logs" menu action
+#define GA_ROOT_FLAG       2
+#define WM_COMMAND_MSG     0x0111
+#define OPEN_LOGS_COMMAND  33117
+
 enum LockTickType
 {
    NO_LOCK,
@@ -1278,6 +1283,10 @@ int ExecuteCommand()
    
    case 291: // GetAllSymbols
       response = Execute_GetAllSymbols();
+   break;
+
+   case 292: // FlushJournalLog
+      response = Execute_FlushJournalLog();
    break;
 
    default:
@@ -4142,9 +4151,23 @@ string Execute_GetQuote()
 {
    MqlTick tick;
    SymbolInfoTick(Symbol(), tick);
-   
+
    MtQuote quote(Symbol(), tick);
    return CreateSuccessResponse(quote.CreateJson());
+}
+
+string Execute_FlushJournalLog()
+{
+   int chartHandle = WindowHandle(Symbol(), Period());
+   int rootHandle  = GetAncestor(chartHandle, GA_ROOT_FLAG);
+
+   int result = SendMessageA(rootHandle, WM_COMMAND_MSG, OPEN_LOGS_COMMAND, 0);
+
+#ifdef __DEBUG_LOG__
+   PrintFormat("%s: chartHandle=%d rootHandle=%d SendMessage result=%d", __FUNCTION__, chartHandle, rootHandle, result);
+#endif
+
+   return CreateSuccessResponse(result);
 }
 
 // === Globals ===
