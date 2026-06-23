@@ -1811,6 +1811,35 @@ namespace MtApi
         }
 
         ///<summary>
+        ///Retrieves the aggregated information for every trading symbol in a single
+        ///request. Symbols without quotes are skipped by the expert.
+        ///</summary>
+        ///<remarks>
+        ///Prefer this over calling <see cref="SymbolInfo"/> in a loop: one round-trip
+        ///replaces one-per-symbol requests and avoids the command queue back-pressure
+        ///that can otherwise cause "Response from MetaTrader is null" timeouts.
+        ///</remarks>
+        ///<param name="onlyMarketWatch">When true, only symbols currently in Market Watch are returned.</param>
+        ///<returns>The list of <see cref="SymbolInfoResponse"/> snapshots (never null).</returns>
+        public List<SymbolInfoResponse> SymbolInfoAll(bool onlyMarketWatch = false)
+        {
+            Dictionary<string, object> cmdParams = new() { { "OnlyMarketWatch", onlyMarketWatch } };
+            return SendCommand<List<SymbolInfoResponse>>(ExecutorHandle, MtCommandType.SymbolInfoAll, cmdParams) ?? [];
+        }
+
+        ///<summary>
+        ///Subscribes (selects into Market Watch) every symbol whose profit calculation
+        ///mode matches <paramref name="profitCalcMode"/>, in a single request.
+        ///</summary>
+        ///<param name="profitCalcMode">The symbol profit calc mode to match (Forex, Cfd, Futures).</param>
+        ///<returns>The names of the symbols that were successfully selected (never null).</returns>
+        public string[] SubscribeSymbols(SymbolProfitCalcMode profitCalcMode)
+        {
+            Dictionary<string, object> cmdParams = new() { { "ProfitCalcMode", (int)profitCalcMode } };
+            return SendCommand<string[]>(ExecutorHandle, MtCommandType.SubscribeSymbols, cmdParams) ?? [];
+        }
+
+        ///<summary>
         ///Flushes the terminal's journal log by triggering the "Open Logs" menu action on the terminal window.
         ///</summary>
         ///<returns>

@@ -292,5 +292,7 @@
         FlushJournalLog                     = 292,
         AccountInfo                         = 293,
         SymbolInfo                          = 294,
+        SymbolInfoAll                       = 295,
+        SubscribeSymbols                    = 296,
     }
 }

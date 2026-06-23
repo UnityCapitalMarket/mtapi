@@ -1297,6 +1297,14 @@ int ExecuteCommand()
       response = Execute_SymbolInfo();
    break;
 
+   case 295: // SymbolInfoAll (aggregated info for all symbols in a single request)
+      response = Execute_SymbolInfoAll();
+   break;
+
+   case 296: // SubscribeSymbols (select all symbols of a given profit calc mode into Market Watch)
+      response = Execute_SubscribeSymbols();
+   break;
+
    default:
       Print("WARNING: Unknown command type = ", command_type);
       response = CreateErrorResponse(-1, "Unknown command type");
@@ -4220,25 +4228,17 @@ string Execute_AccountInfo()
 }
 
 //+------------------------------------------------------------------+
-//| Aggregated symbol information for a single instrument.           |
-//| Returns the commonly used symbol values (prices, contract specs, |
-//| margins, swaps, etc.) in one response so the client does not     |
-//| need a separate request per field. Same rationale as            |
-//| Execute_AccountInfo: one round-trip avoids the queue back-       |
-//| pressure that caused "Response from MetaTrader is null" timeouts |
-//| under concurrent per-field requests.                            |
+//| Builds the aggregated JSON for a single symbol, or returns NULL  |
+//| if the symbol is unknown / has no quotes. Shared by the single   |
+//| (SymbolInfo) and bulk (SymbolInfoAll) commands so the field list |
+//| is defined in exactly one place.                                 |
 //+------------------------------------------------------------------+
-string Execute_SymbolInfo()
+JSONObject* BuildSymbolInfoJson(string symbol)
 {
-   GET_JSON_PAYLOAD(jo);
-   GET_STRING_JSON_VALUE(jo, "Symbol", symbol);
-
    // SymbolInfoTick validates the symbol exists and yields current quotes.
    MqlTick tick;
    if (!SymbolInfoTick(symbol, tick))
-   {
-      return CreateErrorResponse(GetLastError(), "SymbolInfo failed: unknown symbol or no quotes");
-   }
+      return NULL;
 
    JSONObject *res = new JSONObject();
    res.put("Name",           new JSONString(symbol));
@@ -4248,26 +4248,83 @@ string Execute_SymbolInfo()
    res.put("CurrencyMargin", new JSONString(SymbolInfoString(symbol, SYMBOL_CURRENCY_MARGIN)));
    res.put("Bid",            new JSONNumber(tick.bid));
    res.put("Ask",            new JSONNumber(tick.ask));
-   res.put("Last",           new JSONNumber(tick.last));
-   res.put("Volume",         new JSONNumber((long)tick.volume));
+   res.put("ContractSize",   new JSONNumber(SymbolInfoDouble(symbol, SYMBOL_TRADE_CONTRACT_SIZE)));
    res.put("MtTime",         new JSONNumber((long)tick.time));
    res.put("Spread",         new JSONNumber((long)MarketInfo(symbol, MODE_SPREAD)));
    res.put("Digits",         new JSONNumber((long)MarketInfo(symbol, MODE_DIGITS)));
-   res.put("Point",          new JSONNumber(MarketInfo(symbol, MODE_POINT)));
-   res.put("StopLevel",      new JSONNumber((long)MarketInfo(symbol, MODE_STOPLEVEL)));
-   res.put("FreezeLevel",    new JSONNumber((long)MarketInfo(symbol, MODE_FREEZELEVEL)));
-   res.put("LotSize",        new JSONNumber(MarketInfo(symbol, MODE_LOTSIZE)));
-   res.put("TickValue",      new JSONNumber(MarketInfo(symbol, MODE_TICKVALUE)));
-   res.put("TickSize",       new JSONNumber(MarketInfo(symbol, MODE_TICKSIZE)));
    res.put("MinLot",         new JSONNumber(MarketInfo(symbol, MODE_MINLOT)));
    res.put("MaxLot",         new JSONNumber(MarketInfo(symbol, MODE_MAXLOT)));
    res.put("LotStep",        new JSONNumber(MarketInfo(symbol, MODE_LOTSTEP)));
-   res.put("SwapLong",       new JSONNumber(MarketInfo(symbol, MODE_SWAPLONG)));
-   res.put("SwapShort",      new JSONNumber(MarketInfo(symbol, MODE_SWAPSHORT)));
-   res.put("MarginInit",     new JSONNumber(MarketInfo(symbol, MODE_MARGININIT)));
-   res.put("MarginRequired", new JSONNumber(MarketInfo(symbol, MODE_MARGINREQUIRED)));
+   res.put("ProfitcalcMode", new JSONNumber(MarketInfo(symbol, MODE_PROFITCALCMODE)));
+
+   return res;
+}
+
+string Execute_SymbolInfo()
+{
+   GET_JSON_PAYLOAD(jo);
+   GET_STRING_JSON_VALUE(jo, "Symbol", symbol);
+
+   JSONObject* res = BuildSymbolInfoJson(symbol);
+   if (res == NULL)
+   {
+      return CreateErrorResponse(GetLastError(), "SymbolInfo failed: unknown symbol or no quotes");
+   }
 
    return CreateSuccessResponse(res);
+}
+
+//+------------------------------------------------------------------+
+//| Aggregated information for every trading symbol in one response. |
+//| Symbols without quotes are skipped rather than failing the whole |
+//| batch. One round-trip replaces N-per-symbol requests.            |
+//+------------------------------------------------------------------+
+string Execute_SymbolInfoAll()
+{
+   GET_JSON_PAYLOAD(jo);
+   GET_BOOL_JSON_VALUE(jo, "OnlyMarketWatch", onlyMarketWatch);
+
+   int total = FindSymbols(allSymbols, onlyMarketWatch);
+
+   JSONArray* arr = new JSONArray();
+   int idx = 0;
+   for (int i = 0; i < total; i++)
+   {
+      JSONObject* item = BuildSymbolInfoJson(allSymbols[i]);
+      if (item != NULL)
+         arr.put(idx++, item);
+   }
+
+   return CreateSuccessResponse(arr);
+}
+
+//+------------------------------------------------------------------+
+//| Subscribes every symbol whose MODE_PROFITCALCMODE matches the    |
+//| requested value (0 = Forex, 1 = CFD, 2 = Futures) into Market    |
+//| Watch via SymbolSelect, in one request. Returns the list of      |
+//| symbol names that were successfully selected.                    |
+//+------------------------------------------------------------------+
+string Execute_SubscribeSymbols()
+{
+   GET_JSON_PAYLOAD(jo);
+   GET_INT_JSON_VALUE(jo, "ProfitCalcMode", profitCalcMode);
+
+   // Search across all symbols (not just Market Watch) so we can add new ones.
+   int total = FindSymbols(allSymbols, false);
+
+   JSONArray* result = new JSONArray();
+   int idx = 0;
+   for (int i = 0; i < total; i++)
+   {
+      string sym = allSymbols[i];
+      if ((int)MarketInfo(sym, MODE_PROFITCALCMODE) == profitCalcMode)
+      {
+         if (SymbolSelect(sym, true))
+            result.put(idx++, new JSONString(sym));
+      }
+   }
+
+   return CreateSuccessResponse(result);
 }
 
 // === Globals ===
